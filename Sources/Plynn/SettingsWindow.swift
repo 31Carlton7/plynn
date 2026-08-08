@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Bindable var engineManager: EngineManager
     let store: PersonalStore?
     @AppStorage("aiPolish") private var aiPolish = true
+    @AppStorage("learnCorrections") private var learnCorrections = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
     let openOnboarding: () -> Void
@@ -36,6 +37,10 @@ struct SettingsView: View {
             Section("Formatting") {
                 Toggle("AI polish", isOn: $aiPolish)
                 Text("Removes filler words, applies self-corrections, formats lists, and matches tone to the app — fully on-device (Qwen3-4B, loads in the background on launch).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Learn from my corrections", isOn: $learnCorrections)
+                Text("When you fix a word right after a paste, Plynn adds it to your dictionary automatically. Everything stays on this Mac.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

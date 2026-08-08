@@ -93,6 +93,17 @@ public final class PersonalStore: @unchecked Sendable {
         try queue.sync { try run("DELETE FROM terms WHERE id = ?", bind: [.int(id)]) }
     }
 
+    /// Idempotently add one learned alias to an existing term.
+    public func addAlias(termID: Int64, alias: String) throws {
+        guard let term = try terms().first(where: { $0.id == termID }),
+            !term.aliases.contains(where: { $0.caseInsensitiveCompare(alias) == .orderedSame })
+        else { return }
+        let joined = (term.aliases + [alias]).joined(separator: "\u{1F}")
+        try queue.sync {
+            try run("UPDATE terms SET aliases = ? WHERE id = ?", bind: [.text(joined), .int(termID)])
+        }
+    }
+
     /// Lines of `term` or `term,alias1,alias2`. Skips blanks and terms that
     /// already exist. Returns the number imported.
     @discardableResult

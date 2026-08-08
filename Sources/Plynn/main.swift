@@ -190,6 +190,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self, self.model.phase == .done else { return }
                 self.panel.hide()
             }
+            scheduleCorrectionCheck(pasted: text)
+        }
+    }
+
+    /// A few seconds after a paste, re-read the focused field and learn
+    /// dictionary aliases from any single-word ASR fixes the user made.
+    func scheduleCorrectionCheck(pasted: String) {
+        let learnOn = UserDefaults.standard.object(forKey: "learnCorrections") as? Bool ?? true
+        guard learnOn, let store, !pasted.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            guard let self, self.recorder == nil else { return }  // not mid-dictation
+            guard let current = FieldReader.focusedFieldValue(), current != pasted else { return }
+            // Only compare like-for-like: a cleared field (message sent) or a
+            // long document around the paste would produce junk diffs.
+            let pastedWords = pasted.split(whereSeparator: \.isWhitespace).count
+            let currentWords = current.split(whereSeparator: \.isWhitespace).count
+            guard abs(pastedWords - currentWords) <= 3 else { return }
+            let learned = CorrectionLearner.corrections(original: pasted, edited: current)
+            guard !learned.isEmpty, learned.count <= 3 else { return }
+            for fix in learned {
+                let terms = (try? store.terms()) ?? []
+                if let existing = terms.first(where: {
+                    $0.text.caseInsensitiveCompare(fix.corrected) == .orderedSame
+                }) {
+                    try? store.addAlias(termID: existing.id, alias: fix.heard.lowercased())
+                } else {
+                    try? store.addTerm(
+                        text: fix.corrected, aliases: [fix.heard.lowercased()])
+                }
+                NSLog("plynn: learned \"%@\" → \"%@\"", fix.heard, fix.corrected)
+            }
         }
     }
 

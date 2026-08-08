@@ -24,3 +24,10 @@ codesign --force --options runtime --deep \
   --entitlements scripts/plynn.entitlements \
   --sign "$IDENTITY" "$APP"
 echo "Built and signed $APP"
+
+# --install: replace the copy in /Applications (relaunch is the caller's job).
+if [[ "${1:-}" == "--install" ]]; then
+  rm -rf /Applications/Plynn.app
+  ditto "$APP" /Applications/Plynn.app
+  echo "Installed to /Applications/Plynn.app"
+fi

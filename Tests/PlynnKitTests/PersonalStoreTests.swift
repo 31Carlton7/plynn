@@ -52,6 +52,13 @@ final class PersonalStoreTests: XCTestCase {
         XCTAssertEqual(try store.terms().count, 2)
     }
 
+    func testAddAliasIdempotent() throws {
+        let id = try store.addTerm(text: "Plynn", aliases: ["plin"])
+        try store.addAlias(termID: id, alias: "plyn")
+        try store.addAlias(termID: id, alias: "PLYN")  // dupe, case-insensitive
+        XCTAssertEqual(try store.terms()[0].aliases, ["plin", "plyn"])
+    }
+
     // MARK: Snippets
 
     func testAddListDeleteSnippet() throws {
