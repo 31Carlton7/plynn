@@ -16,6 +16,11 @@ if CommandLine.arguments.contains("record") {
         done.signal()
     }
     done.wait()
+} else if CommandLine.arguments.contains("paste") {
+    print("Focus a text field — pasting in 3s…")
+    Thread.sleep(forTimeInterval: 3)
+    DispatchQueue.main.async { Paster.paste("hello from plynn") }
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 1))
 } else {
     print("plynn spike")
 }
