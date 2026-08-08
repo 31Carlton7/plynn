@@ -169,6 +169,12 @@ struct HistoryView: View {
                         Text(entry.timestamp, style: .relative) + Text(" ago")
                         Text("·")
                         Text(appName(entry.app))
+                        if entry.engine == "wispr-flow" {
+                            Text("Wispr")
+                                .font(.caption2.weight(.medium))
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(.quaternary, in: Capsule())
+                        }
                         Spacer()
                         if copiedID == entry.id {
                             Text("Copied").foregroundStyle(.green)

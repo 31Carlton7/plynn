@@ -256,6 +256,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func openSetup() { onboarding.show() }
     @objc func openHistory() { history?.show() }
 
+    /// Menu-bar app with no Dock icon: clicking Plynn.app in Finder/Launchpad
+    /// re-opens it — surface Settings so the click visibly does something.
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication, hasVisibleWindows: Bool
+    ) -> Bool {
+        if !hasVisibleWindows { settings.show() }
+        return true
+    }
+
     private var currentIconName = ""
 
     func refreshStatusIcon() {

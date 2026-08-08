@@ -84,4 +84,41 @@ final class TextPersonalizerTests: XCTestCase {
     func testNoTermsNoChange() {
         XCTAssertEqual(DictionaryCorrector.correct("nothing here", terms: []), "nothing here")
     }
+
+    func testCommonWordAliasIsInert() {
+        // Imported data can carry aliases like "plan" → replacing every real
+        // "plan" would corrupt dictations; common-word aliases must be skipped.
+        let term = PersonalStore.Term(id: 3, text: "plynn", aliases: ["plan"])
+        XCTAssertEqual(
+            DictionaryCorrector.correct(
+                "let's make a plan", terms: [term], commonWords: ["plan", "the", "make"]),
+            "let's make a plan")
+    }
+
+    func testRareAliasStillCorrectsWithGuard() {
+        let term = PersonalStore.Term(id: 1, text: "Plynn", aliases: ["plin"])
+        XCTAssertEqual(
+            DictionaryCorrector.correct(
+                "I built plin today", terms: [term], commonWords: ["plan", "built"]),
+            "I built Plynn today")
+    }
+
+    // MARK: relevantTerms (LLM prompt cap)
+
+    func testRelevantTermsMatchesNearMisses() {
+        let terms = [plynn, aikins, PersonalStore.Term(id: 9, text: "Kubernetes", aliases: [])]
+        let relevant = DictionaryCorrector.relevantTerms(
+            for: "we shipped plynne to production", terms: terms)
+        XCTAssertEqual(relevant, ["Plynn"])
+    }
+
+    func testRelevantTermsEmptyWhenNothingClose() {
+        XCTAssertTrue(
+            DictionaryCorrector.relevantTerms(for: "hello world", terms: [plynn, aikins]).isEmpty)
+    }
+
+    func testRelevantTermsMatchesAliases() {
+        let relevant = DictionaryCorrector.relevantTerms(for: "ping akins now", terms: [aikins])
+        XCTAssertEqual(relevant, ["Aikins"])
+    }
 }

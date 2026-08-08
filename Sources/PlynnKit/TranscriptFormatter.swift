@@ -47,7 +47,7 @@ public actor TranscriptFormatter {
             let profile = AppCategories.profile(forBundleID: bundleID)
             text = await llm.format(
                 text, tone: profile.tone, technical: profile.isTechnical,
-                preferredSpellings: terms.map(\.text))
+                preferredSpellings: DictionaryCorrector.relevantTerms(for: text, terms: terms))
             // The LLM can regress a spelling it saw in the raw text; re-assert.
             text = DictionaryCorrector.correct(text, terms: terms)
         }

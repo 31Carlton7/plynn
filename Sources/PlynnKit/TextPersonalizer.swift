@@ -19,11 +19,26 @@ public enum SnippetExpander {
 /// Rewrites ASR near-misses of dictionary terms ("plin" → "Plynn") and
 /// enforces canonical casing. Whole-word, case-insensitive.
 public enum DictionaryCorrector {
-    public static func correct(_ text: String, terms: [PersonalStore.Term]) -> String {
+    /// Real English words are never valid ASR-miss aliases: an alias like
+    /// "plan" (seen in Wispr imports) would rewrite every genuine use of the
+    /// word. Case-only variants of the canonical text are exempt.
+    private static let systemWords: Set<String> = {
+        guard let content = try? String(contentsOfFile: "/usr/share/dict/words", encoding: .utf8)
+        else { return [] }
+        return Set(content.components(separatedBy: .newlines).map { $0.lowercased() })
+    }()
+
+    public static func correct(
+        _ text: String, terms: [PersonalStore.Term], commonWords: Set<String>? = nil
+    ) -> String {
+        let dictionary = commonWords ?? systemWords
         var result = text
         for term in terms where !term.text.isEmpty {
             // Aliases plus the canonical spelling itself (fixes casing).
             for variant in term.aliases + [term.text] where !variant.isEmpty {
+                let isCaseVariantOfTerm =
+                    variant.caseInsensitiveCompare(term.text) == .orderedSame
+                if !isCaseVariantOfTerm, dictionary.contains(variant.lowercased()) { continue }
                 let pattern = "\\b" + NSRegularExpression.escapedPattern(for: variant) + "\\b"
                 result = result.replacingOccurrences(
                     of: pattern,
@@ -32,5 +47,29 @@ public enum DictionaryCorrector {
             }
         }
         return result
+    }
+
+    /// The subset of terms worth telling the LLM about for THIS transcript —
+    /// with a large imported dictionary, sending all of it would bloat every
+    /// prompt. A term is relevant when some transcript word is within edit
+    /// distance 2 of the term or one of its aliases.
+    public static func relevantTerms(
+        for text: String, terms: [PersonalStore.Term]
+    ) -> [String] {
+        let words = text.lowercased()
+            .split(whereSeparator: \.isWhitespace)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters) }
+            .filter { $0.count >= 3 }
+        guard !words.isEmpty else { return [] }
+        return terms.filter { term in
+            let variants = ([term.text] + term.aliases)
+                .map { $0.lowercased() }.filter { $0.count >= 3 }
+            return variants.contains { variant in
+                words.contains { word in
+                    abs(word.count - variant.count) <= 2
+                        && CorrectionLearner.editDistance(word, variant) <= 2
+                }
+            }
+        }.map(\.text)
     }
 }
