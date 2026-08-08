@@ -9,13 +9,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = IndicatorModel()
     lazy var panel = IndicatorPanel(model: model)
     lazy var onboarding = OnboardingWindowController(engineManager: engineManager)
-    lazy var settings = SettingsWindowController(engineManager: engineManager) { [weak self] in
+    lazy var settings = SettingsWindowController(engineManager: engineManager, store: store) {
+        [weak self] in
         self?.onboarding.show()
     }
     var statusItem: NSStatusItem!
 
-    let formatter = TranscriptFormatter()
+    let store = try? PersonalStore(path: PersonalStore.defaultPath())
+    lazy var history = store.map { HistoryWindowController(store: $0) }
+    lazy var formatter = TranscriptFormatter(personalization: { [store] in
+        ((try? store?.snippets()) ?? [], (try? store?.terms()) ?? [])
+    })
     var pendingPressEnter = false
+    var lastCaptureSeconds = 0.0
 
     var session = Session()
     var recorder: AudioRecorder?
@@ -129,7 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             chunkContinuation?.finish()
             chunkContinuation = nil
             model.phase = .transcribing
-            NSLog("plynn: captured %.1fs", Double(samples.count) / 16_000)
+            lastCaptureSeconds = Double(samples.count) / 16_000
+            NSLog("plynn: captured %.1fs", lastCaptureSeconds)
             let feedTask = feedTask
             let engine = sessionEngine
             let formatter = formatter
@@ -143,6 +150,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.pendingPressEnter = result.pressEnter
                     if result.text != result.verbatim {
                         NSLog("plynn: verbatim — %@", result.verbatim)
+                    }
+                    if !result.text.isEmpty {
+                        try? self.store?.record(
+                            app: bundleID ?? "unknown",
+                            verbatim: result.verbatim, formatted: result.text,
+                            durationSeconds: self.lastCaptureSeconds,
+                            engine: engine?.displayName ?? "unknown")
                     }
                     self.dispatch(.transcriptReady(result.text))
                 }
@@ -194,6 +208,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
+        let historyItem = NSMenuItem(
+            title: "History…", action: #selector(openHistory), keyEquivalent: "y")
+        historyItem.target = self
+        menu.addItem(historyItem)
         let setupItem = NSMenuItem(title: "Setup…", action: #selector(openSetup), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
@@ -205,6 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openSettings() { settings.show() }
     @objc func openSetup() { onboarding.show() }
+    @objc func openHistory() { history?.show() }
 
     private var currentIconName = ""
 

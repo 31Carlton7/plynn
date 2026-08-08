@@ -4,12 +4,26 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var engineManager: EngineManager
+    let store: PersonalStore?
     @AppStorage("aiPolish") private var aiPolish = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
     let openOnboarding: () -> Void
 
     var body: some View {
+        TabView {
+            general.tabItem { Label("General", systemImage: "gearshape") }
+            if let store {
+                DictionaryView(store: store)
+                    .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
+                SnippetsView(store: store)
+                    .tabItem { Label("Snippets", systemImage: "text.insert") }
+            }
+        }
+        .frame(width: 480, height: 420)
+    }
+
+    private var general: some View {
         Form {
             Section("Transcription") {
                 Picker("Engine", selection: $engineManager.preferred) {
@@ -47,7 +61,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420, height: 320)
     }
 }
 
@@ -55,10 +68,15 @@ struct SettingsView: View {
 final class SettingsWindowController {
     private var window: NSWindow?
     private let engineManager: EngineManager
+    private let store: PersonalStore?
     private let openOnboarding: () -> Void
 
-    init(engineManager: EngineManager, openOnboarding: @escaping () -> Void) {
+    init(
+        engineManager: EngineManager, store: PersonalStore?,
+        openOnboarding: @escaping () -> Void
+    ) {
         self.engineManager = engineManager
+        self.store = store
         self.openOnboarding = openOnboarding
     }
 
@@ -71,7 +89,7 @@ final class SettingsWindowController {
             w.title = "Plynn Settings"
             w.isReleasedWhenClosed = false
             w.contentView = NSHostingView(rootView: SettingsView(
-                engineManager: engineManager, openOnboarding: openOnboarding))
+                engineManager: engineManager, store: store, openOnboarding: openOnboarding))
             w.center()
             window = w
         }

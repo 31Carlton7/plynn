@@ -29,11 +29,14 @@ public actor LLMFormatter {
         model = container
     }
 
-    public func format(_ text: String, tone: Tone, technical: Bool) async -> String {
+    public func format(
+        _ text: String, tone: Tone, technical: Bool, preferredSpellings: [String] = []
+    ) async -> String {
         guard let model else { return text }
         // Everything in ONE user message with the transcript fenced as data —
         // a system prompt + bare text makes the model chat ABOUT the text.
-        let prompt = Self.prompt(tone: tone, technical: technical) + """
+        let prompt = Self.prompt(
+            tone: tone, technical: technical, preferredSpellings: preferredSpellings) + """
 
 
         <transcript>
@@ -60,7 +63,9 @@ public actor LLMFormatter {
         return out
     }
 
-    static func prompt(tone: Tone, technical: Bool) -> String {
+    static func prompt(
+        tone: Tone, technical: Bool, preferredSpellings: [String] = []
+    ) -> String {
         var p = """
         Below is a raw dictated transcript inside <transcript> tags. Rewrite it \
         as clean written text. Rules:
@@ -85,6 +90,10 @@ public actor LLMFormatter {
         }
         if technical {
             p += "\n- Preserve technical terms, code identifiers (camelCase, snake_case), file names, and shell commands exactly as spoken."
+        }
+        if !preferredSpellings.isEmpty {
+            p += "\n- Use these exact spellings when the transcript approximates them: "
+                + preferredSpellings.joined(separator: ", ") + "."
         }
         return p
     }
