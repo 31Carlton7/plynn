@@ -1,112 +1,220 @@
 import SwiftUI
 
-/// Content of the floating capsule: Liquid Glass surface, white type, and a
-/// fluid ribbon visualizer driven by live mic level.
+/// The floating capsule: Liquid Glass surface whose bottom third is a live
+/// waveform blended into the glass, centered text that fades up and slides
+/// as it overflows, and a close-in checkmark on success.
 struct IndicatorView: View {
     @Bindable var model: IndicatorModel
     @Namespace private var glassNS
 
+    private var isCompact: Bool { model.phase == .done }
+
     var body: some View {
         GlassEffectContainer {
-            HStack(spacing: 12) {
-                switch model.phase {
-                case .recording(let handsFree):
-                    if handsFree {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.65))
-                    }
-                    FluidRibbon(level: model.level, idle: false)
-                        .frame(width: 74, height: 30)
-                    Text(displayPartial)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(model.partial.isEmpty ? .white.opacity(0.45) : .white)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentTransition(.numericText())
-                case .transcribing:
-                    FluidRibbon(level: 0.04, idle: true)
-                        .frame(width: 74, height: 30)
-                    Text("Polishing…")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                case .secure:
-                    Image(systemName: "lock.shield.fill")
-                        .foregroundStyle(.white.opacity(0.9))
-                    Text("Secure field — dictation paused")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            ZStack {
+                // Bottom-blended visualizer — always present (inert when hidden)
+                // so phase changes never reset its motion.
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    BottomWave(level: model.level, idle: model.phase == .transcribing)
+                        .frame(height: 22)
                 }
+                .opacity(waveOpacity)
+
+                centerContent
             }
-            .padding(.horizontal, 18)
-            .frame(width: 360, height: 52)
+            .frame(width: isCompact ? 56 : 360, height: 52)
+            .clipShape(Capsule())
             .glassEffect(.regular.tint(.white.opacity(0.08)).interactive(), in: .capsule)
             .glassEffectID("capsule", in: glassNS)
         }
         .contentShape(Capsule())
         .onTapGesture { model.onTap?() }
-        .animation(.smooth(duration: 0.3), value: model.phase)
+        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: model.phase)
         .padding(4)
     }
 
-    private var displayPartial: String {
-        if model.partial.isEmpty { return "Listening…" }
-        return String(model.partial.suffix(46))
+    private var waveOpacity: Double {
+        switch model.phase {
+        case .recording, .transcribing: return 1
+        case .done, .secure: return 0
+        }
+    }
+
+    @ViewBuilder
+    private var centerContent: some View {
+        switch model.phase {
+        case .recording(let handsFree):
+            HStack(spacing: 8) {
+                if handsFree {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .transition(.opacity)
+                }
+                ScrollingPartial(text: model.partial, placeholder: "Listening…")
+            }
+            .padding(.horizontal, 22)
+        case .transcribing:
+            Text("Polishing…")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.55))
+                .transition(.opacity)
+        case .done:
+            AnimatedCheckmark()
+        case .secure:
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield.fill")
+                    .foregroundStyle(.white.opacity(0.9))
+                Text("Secure field — dictation paused")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        }
     }
 }
 
-/// Layered white sine ribbons whose amplitude breathes with the mic level.
-/// Phase advances continuously via TimelineView so the motion never freezes;
-/// an end-pinned envelope keeps the ribbon inside the capsule.
-private struct FluidRibbon: View {
+/// Centered dictation text: fades up as it first appears; once it outgrows
+/// the container it pins to the trailing edge, so each new word slides the
+/// line left under soft gradient fades — subtle, macOS-native motion.
+private struct ScrollingPartial: View {
+    let text: String
+    let placeholder: String
+    @State private var textWidth: CGFloat = 0
+
+    private let containerWidth: CGFloat = 296
+    private var overflowing: Bool { textWidth > containerWidth }
+
+    var body: some View {
+        ZStack {
+            if text.isEmpty {
+                Text(placeholder)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .transition(.opacity)
+            } else {
+                Text(text)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) {
+                        textWidth = $0
+                    }
+                    .frame(
+                        width: containerWidth,
+                        alignment: overflowing ? .trailing : .center)
+                    .clipped()
+                    .mask(
+                        HStack(spacing: 0) {
+                            LinearGradient(
+                                colors: [.clear, .white], startPoint: .leading, endPoint: .trailing)
+                                .frame(width: 18)
+                                .opacity(overflowing ? 1 : 0)
+                            Rectangle()
+                            LinearGradient(
+                                colors: [.white, .clear], startPoint: .leading, endPoint: .trailing)
+                                .frame(width: 12)
+                        })
+                    .animation(.smooth(duration: 0.28), value: text)
+                    .transition(.opacity.combined(with: .offset(y: 7)))
+            }
+        }
+        .animation(.smooth(duration: 0.3), value: text.isEmpty)
+    }
+}
+
+/// Filled, layered waves rising from the capsule floor — low opacity, masked
+/// so they dissolve upward into the glass. Amplitude breathes with the mic.
+private struct BottomWave: View {
     let level: Float
     let idle: Bool
 
-    private struct Ribbon {
-        let frequency: Double   // waves across the width
-        let speed: Double       // phase advance per second
+    private struct Layer {
+        let frequency: Double
+        let speed: Double
         let ampScale: Double
+        let baseHeight: Double
         let opacity: Double
-        let lineWidth: Double
     }
 
-    private static let ribbons: [Ribbon] = [
-        .init(frequency: 1.6, speed: 2.4, ampScale: 1.00, opacity: 0.95, lineWidth: 2.2),
-        .init(frequency: 2.3, speed: -1.7, ampScale: 0.70, opacity: 0.45, lineWidth: 1.6),
-        .init(frequency: 3.1, speed: 3.3, ampScale: 0.45, opacity: 0.25, lineWidth: 1.2),
+    private static let layers: [Layer] = [
+        .init(frequency: 1.3, speed: 1.9, ampScale: 1.00, baseHeight: 5, opacity: 0.22),
+        .init(frequency: 2.1, speed: -1.4, ampScale: 0.75, baseHeight: 4, opacity: 0.15),
+        .init(frequency: 3.4, speed: 2.7, ampScale: 0.50, baseHeight: 3, opacity: 0.10),
     ]
 
     var body: some View {
         TimelineView(.animation) { timeline in
             Canvas { ctx, size in
                 let t = timeline.date.timeIntervalSinceReferenceDate
-                // Typical speech RMS is ~0.02–0.2; map to 0…1 with a soft knee.
-                let drive = idle ? 0.12 : min(1, Double(level) * 7)
-                let midY = size.height / 2
-                let maxAmp = (size.height / 2) - 2
+                // Typical speech RMS ~0.02–0.2 → 0…1 with a soft knee.
+                let drive = idle ? 0.10 : min(1, Double(level) * 7)
 
-                for r in Self.ribbons {
+                for layer in Self.layers {
                     var path = Path()
-                    let amp = maxAmp * r.ampScale * (0.12 + 0.88 * drive)
-                    let steps = 48
+                    let amp = (size.height - layer.baseHeight)
+                        * layer.ampScale * (0.10 + 0.90 * drive)
+                    path.move(to: CGPoint(x: 0, y: size.height))
+                    let steps = 56
                     for i in 0...steps {
-                        let x = size.width * Double(i) / Double(steps)
                         let progress = Double(i) / Double(steps)
-                        let envelope = sin(.pi * progress)  // pin both ends
-                        let y = midY + sin(progress * r.frequency * 2 * .pi + t * r.speed)
-                            * amp * envelope
-                        if i == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                        else { path.addLine(to: CGPoint(x: x, y: y)) }
+                        let x = size.width * progress
+                        // Two incommensurate sines per layer for an organic edge.
+                        let wave = sin(progress * layer.frequency * 2 * .pi + t * layer.speed)
+                            * 0.7
+                            + sin(progress * layer.frequency * 3.7 * .pi - t * layer.speed * 0.6)
+                            * 0.3
+                        let y = size.height - layer.baseHeight - max(0, wave) * amp
+                        path.addLine(to: CGPoint(x: x, y: y))
                     }
-                    ctx.stroke(
-                        path,
-                        with: .color(.white.opacity(r.opacity)),
-                        style: StrokeStyle(lineWidth: r.lineWidth, lineCap: .round))
+                    path.addLine(to: CGPoint(x: size.width, y: size.height))
+                    path.closeSubpath()
+                    ctx.fill(path, with: .color(.white.opacity(layer.opacity)))
                 }
             }
         }
+        // Dissolve upward into the glass; solid only at the very bottom.
+        .mask(
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .white.opacity(0.7), location: 0.55),
+                    .init(color: .white, location: 1),
+                ],
+                startPoint: .top, endPoint: .bottom))
         .animation(.easeOut(duration: 0.12), value: level)
+    }
+}
+
+/// Check mark that draws itself on, with a small spring pop.
+private struct AnimatedCheckmark: View {
+    @State private var progress: CGFloat = 0
+    @State private var popped = false
+
+    var body: some View {
+        CheckShape()
+            .trim(from: 0, to: progress)
+            .stroke(
+                .white,
+                style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+            .frame(width: 20, height: 20)
+            .scaleEffect(popped ? 1 : 0.7)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.3).delay(0.12)) { progress = 1 }
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.6).delay(0.1)) {
+                    popped = true
+                }
+            }
+    }
+
+    private struct CheckShape: Shape {
+        func path(in rect: CGRect) -> Path {
+            var p = Path()
+            p.move(to: CGPoint(x: rect.minX + rect.width * 0.05, y: rect.minY + rect.height * 0.55))
+            p.addLine(to: CGPoint(x: rect.minX + rect.width * 0.38, y: rect.minY + rect.height * 0.85))
+            p.addLine(to: CGPoint(x: rect.minX + rect.width * 0.95, y: rect.minY + rect.height * 0.18))
+            return p
+        }
     }
 }

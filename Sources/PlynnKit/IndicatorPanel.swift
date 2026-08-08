@@ -7,6 +7,8 @@ public final class IndicatorModel {
     public enum Phase: Equatable {
         case recording(handsFree: Bool)
         case transcribing
+        /// Success state: capsule closes in and a check mark draws on.
+        case done
         case secure
     }
     public var phase: Phase = .recording(handsFree: false)

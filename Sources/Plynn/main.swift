@@ -73,8 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for effect in session.handle(event, at: .now) {
             perform(effect)
         }
-        // Covers the no-effect paths back to idle (e.g. empty transcript → no paste).
-        if session.state == .idle, recorder == nil, model.phase != .secure {
+        // Covers the no-effect paths back to idle (e.g. empty transcript → no
+        // paste). The .done check state hides itself on a timer instead.
+        if session.state == .idle, recorder == nil,
+            model.phase != .secure, model.phase != .done {
             panel.hide()
         }
         refreshStatusIcon()
@@ -163,13 +165,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("plynn: [%@ latency] RSS %.0f MB — %@",
                       "\(releasedAt.duration(to: .now))", Metrics.residentMB(), text)
             }
-            Paster.paste(text)
+            Paster.paste(text)  // fires immediately — the check animates while it lands
             if pendingPressEnter {
                 pendingPressEnter = false
                 // After the paste chord (0.1 s delay + keystrokes) has landed.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { Paster.pressReturn() }
             }
-            panel.hide()
+            model.phase = .done
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) { [weak self] in
+                guard let self, self.model.phase == .done else { return }
+                self.panel.hide()
+            }
         }
     }
 
