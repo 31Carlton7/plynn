@@ -2,21 +2,21 @@
 import PackageDescription
 
 let package = Package(
-    name: "PlynnSpike",
+    name: "Plynn",
     platforms: [.macOS("26.0")],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.5"),
     ],
     targets: [
         .target(
-            name: "PlynnSpikeKit",
+            name: "PlynnKit",
             dependencies: [.product(name: "FluidAudio", package: "FluidAudio")]),
         .executableTarget(
-            name: "PlynnSpike",
-            dependencies: ["PlynnSpikeKit"]),
+            name: "Plynn",
+            dependencies: ["PlynnKit"]),
         .testTarget(
-            name: "PlynnSpikeKitTests",
-            dependencies: ["PlynnSpikeKit"],
+            name: "PlynnKitTests",
+            dependencies: ["PlynnKit"],
             resources: [.copy("Fixtures")]),
     ]
 )

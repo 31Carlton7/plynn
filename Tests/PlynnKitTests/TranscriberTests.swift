@@ -1,5 +1,5 @@
 import XCTest
-@testable import PlynnSpikeKit
+@testable import PlynnKit
 
 final class TranscriberTests: XCTestCase {
     nonisolated(unsafe) static var transcriber: Transcriber!

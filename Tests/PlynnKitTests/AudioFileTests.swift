@@ -1,6 +1,6 @@
 import AVFoundation
 import XCTest
-@testable import PlynnSpikeKit
+@testable import PlynnKit
 
 final class AudioFileTests: XCTestCase {
     func fixtureURL(_ name: String) -> URL {

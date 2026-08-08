@@ -1,5 +1,5 @@
 import AppKit
-import PlynnSpikeKit
+import PlynnKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let hotkey = HotkeyMonitor()
