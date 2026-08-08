@@ -5,13 +5,19 @@ import PlynnKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let hotkey = HotkeyMonitor()
     let secureWatcher = SecureInputWatcher()
-    let streaming = StreamingTranscriber()
+    let engineManager = EngineManager()
     let model = IndicatorModel()
     lazy var panel = IndicatorPanel(model: model)
+    lazy var onboarding = OnboardingWindowController(engineManager: engineManager)
+    lazy var settings = SettingsWindowController(engineManager: engineManager) { [weak self] in
+        self?.onboarding.show()
+    }
     var statusItem: NSStatusItem!
 
     var session = Session()
     var recorder: AudioRecorder?
+    /// Engine chosen at session start; never swapped mid-session.
+    var sessionEngine: (any DictationEngine)?
     var chunkContinuation: AsyncStream<[Float]>.Continuation?
     var feedTask: Task<Void, Never>?
     var releasedAt: ContinuousClock.Instant?
@@ -20,10 +26,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLog("plynn: starting; RSS %.0f MB", Metrics.residentMB())
         setUpStatusItem()
 
-        // Warm models so the first dictation doesn't pay the load cost.
-        Task {
-            try? await streaming.start()
-            NSLog("plynn: models warm; RSS %.0f MB", Metrics.residentMB())
+        if !Permissions.micGranted() || !Permissions.accessibilityGranted() {
+            onboarding.show()
+        }
+
+        // Warm the active engine so the first dictation doesn't pay the load cost.
+        Task { [engineManager] in
+            try? await engineManager.engineForNewSession().start()
+            NSLog("plynn: engine warm; RSS %.0f MB", Metrics.residentMB())
         }
 
         model.onTap = { [weak self] in self?.dispatch(.stopRequested) }
@@ -75,14 +85,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let (stream, continuation) = AsyncStream.makeStream(of: [Float].self)
             chunkContinuation = continuation
-            let streaming = streaming
+            let engine = engineManager.engineForNewSession()
+            sessionEngine = engine
             feedTask = Task {
-                try? await streaming.start()
-                await streaming.setPartialCallback { [weak self] text in
+                try? await engine.start()
+                await engine.setPartialCallback { [weak self] text in
                     Task { @MainActor in self?.model.partial = text }
                 }
                 for await chunk in stream {  // AsyncStream preserves chunk order
-                    try? await streaming.append(samples: chunk)
+                    try? await engine.append(samples: chunk)
                 }
             }
 
@@ -107,10 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.phase = .transcribing
             NSLog("plynn: captured %.1fs", Double(samples.count) / 16_000)
             let feedTask = feedTask
-            let streaming = streaming
+            let engine = sessionEngine
             Task {
                 await feedTask?.value  // all chunks fed, in order
-                let text = (try? await streaming.finish()) ?? ""
+                let text = (try? await engine?.finish()) ?? ""
                 await MainActor.run { self.dispatch(.transcriptReady(text)) }
             }
 
@@ -136,18 +147,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    var engineStateItem: NSMenuItem!
+
     func setUpStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         refreshStatusIcon()
         let menu = NSMenu()
-        let state = NSMenuItem(title: "Plynn 0.1 — hold fn to dictate", action: nil, keyEquivalent: "")
-        state.isEnabled = false
-        menu.addItem(state)
+        menu.delegate = self
+        engineStateItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        engineStateItem.isEnabled = false
+        menu.addItem(engineStateItem)
+        menu.addItem(.separator())
+        let settingsItem = NSMenuItem(
+            title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        let setupItem = NSMenuItem(title: "Setup…", action: #selector(openSetup), keyEquivalent: "")
+        setupItem.target = self
+        menu.addItem(setupItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit Plynn", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
     }
+
+    @objc func openSettings() { settings.show() }
+    @objc func openSetup() { onboarding.show() }
 
     private var currentIconName = ""
 
@@ -162,6 +187,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentIconName = name
         statusItem.button?.image = NSImage(
             systemSymbolName: name, accessibilityDescription: "Plynn")
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        engineStateItem.title = engineManager.statusLine
     }
 }
 
