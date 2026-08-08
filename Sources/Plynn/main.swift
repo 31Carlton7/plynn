@@ -14,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     var statusItem: NSStatusItem!
 
+    let formatter = TranscriptFormatter()
+    var pendingPressEnter = false
+
     var session = Session()
     var recorder: AudioRecorder?
     /// Engine chosen at session start; never swapped mid-session.
@@ -30,10 +33,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onboarding.show()
         }
 
-        // Warm the active engine so the first dictation doesn't pay the load cost.
-        Task { [engineManager] in
+        // Warm the active engine, then the polish LLM (serialized — don't
+        // compete for download bandwidth or memory pressure at launch).
+        Task { [engineManager, formatter] in
             try? await engineManager.engineForNewSession().start()
             NSLog("plynn: engine warm; RSS %.0f MB", Metrics.residentMB())
+            await formatter.warmLLM()
+            NSLog("plynn: LLM %@; RSS %.0f MB",
+                  await formatter.llmReady ? "ready" : "unavailable", Metrics.residentMB())
         }
 
         model.onTap = { [weak self] in self?.dispatch(.stopRequested) }
@@ -123,10 +130,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog("plynn: captured %.1fs", Double(samples.count) / 16_000)
             let feedTask = feedTask
             let engine = sessionEngine
+            let formatter = formatter
+            let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            let aiPolish = UserDefaults.standard.object(forKey: "aiPolish") as? Bool ?? true
             Task {
                 await feedTask?.value  // all chunks fed, in order
-                let text = (try? await engine?.finish()) ?? ""
-                await MainActor.run { self.dispatch(.transcriptReady(text)) }
+                let raw = (try? await engine?.finish()) ?? ""
+                let result = await formatter.format(raw, bundleID: bundleID, aiPolish: aiPolish)
+                await MainActor.run {
+                    self.pendingPressEnter = result.pressEnter
+                    if result.text != result.verbatim {
+                        NSLog("plynn: verbatim — %@", result.verbatim)
+                    }
+                    self.dispatch(.transcriptReady(result.text))
+                }
             }
 
         case .discardRecording:
@@ -147,6 +164,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                       "\(releasedAt.duration(to: .now))", Metrics.residentMB(), text)
             }
             Paster.paste(text)
+            if pendingPressEnter {
+                pendingPressEnter = false
+                // After the paste chord (0.1 s delay + keystrokes) has landed.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { Paster.pressReturn() }
+            }
             panel.hide()
         }
     }

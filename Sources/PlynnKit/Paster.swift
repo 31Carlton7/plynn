@@ -26,6 +26,16 @@ public enum Paster {
         }
     }
 
+    /// Synthesize a Return keypress (the "press enter" command) — call only
+    /// after the paste has landed.
+    public static func pressReturn() {
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_Return), keyDown: true)
+        let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_Return), keyDown: false)
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
+    }
+
     private static func postCmdV() {
         let src = CGEventSource(stateID: .combinedSessionState)
         let vKey = CGKeyCode(kVK_ANSI_V)

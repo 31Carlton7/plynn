@@ -4,6 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var engineManager: EngineManager
+    @AppStorage("aiPolish") private var aiPolish = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
     let openOnboarding: () -> Void
@@ -17,6 +18,12 @@ struct SettingsView: View {
                     Text("Apple (built-in)").tag(EngineChoice.apple)
                 }
                 LabeledContent("Status", value: engineManager.statusLine)
+            }
+            Section("Formatting") {
+                Toggle("AI polish", isOn: $aiPolish)
+                Text("Removes filler words, applies self-corrections, formats lists, and matches tone to the app — fully on-device (Qwen3-4B, loads in the background on launch).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("General") {
                 Toggle("Launch at login", isOn: $launchAtLogin)
