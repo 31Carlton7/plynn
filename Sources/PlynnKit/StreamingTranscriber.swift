@@ -4,7 +4,8 @@ import FluidAudio
 /// Streaming ASR over FluidAudio's Parakeet Unified streaming manager, with a
 /// VAD silence gate at finish() so silence-only sessions can never hallucinate
 /// text. Reusable across sessions: call start() before each dictation.
-public actor StreamingTranscriber {
+public actor StreamingTranscriber: DictationEngine {
+    public nonisolated let displayName = "Parakeet (local)"
     private let variant: StreamingModelVariant
     private var manager: (any StreamingAsrManager)?
     private var vad: VadManager?
