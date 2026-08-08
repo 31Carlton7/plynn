@@ -27,7 +27,7 @@ public final class IndicatorPanel: NSPanel {
     public init(model: IndicatorModel) {
         self.model = model
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 44),
+            contentRect: NSRect(x: 0, y: 0, width: 368, height: 60),
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered, defer: false)
         isFloatingPanel = true

@@ -102,7 +102,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             r.onChunk = { [weak self] chunk in
                 continuation.yield(chunk)
                 let level = AudioLevel.rms(of: chunk)
-                Task { @MainActor in self?.model.level = level }
+                Task { @MainActor in
+                    guard let self else { return }
+                    // Fast attack, slow release — keeps the ribbon fluid between chunks.
+                    self.model.level = max(level, self.model.level * 0.82)
+                }
             }
             do { try r.start() } catch {
                 NSLog("plynn: mic error \(error)")
