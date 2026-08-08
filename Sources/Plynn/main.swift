@@ -45,8 +45,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await engineManager.engineForNewSession().start()
             NSLog("plynn: engine warm; RSS %.0f MB", Metrics.residentMB())
             await formatter.warmLLM()
-            NSLog("plynn: LLM %@; RSS %.0f MB",
-                  await formatter.llmReady ? "ready" : "unavailable", Metrics.residentMB())
+            NSLog("plynn: polish engine %@; RSS %.0f MB",
+                  await formatter.polishEngine ?? "none (rules only)", Metrics.residentMB())
+            if let reason = await formatter.appleFMStatus {
+                NSLog("plynn: Apple Intelligence %@", reason)
+            }
         }
 
         model.onTap = { [weak self] in self?.dispatch(.stopRequested) }

@@ -10,7 +10,8 @@ public struct FormatResult: Equatable, Sendable {
 /// correction, then optional LLM polish. Every path returns something
 /// pasteable; LLM problems degrade to the deterministic output.
 public actor TranscriptFormatter {
-    private let llm = LLMFormatter()
+    private let appleFM = AppleFMFormatter()
+    private let llm = LLMFormatter()  // fallback when Apple Intelligence is off
     /// Reloaded per call so Settings edits apply immediately.
     private let personalization: @Sendable () -> (
         snippets: [PersonalStore.Snippet], terms: [PersonalStore.Term]
@@ -24,13 +25,28 @@ public actor TranscriptFormatter {
         self.personalization = personalization
     }
 
-    public var llmReady: Bool {
-        get async { await llm.ready }
+    /// Which polish engine is live, for status display. Nil = rules only.
+    public var polishEngine: String? {
+        get async {
+            if appleFM.ready { return "Apple Intelligence" }
+            if await llm.ready { return "Qwen3-4B (local)" }
+            return nil
+        }
     }
 
-    /// Kick the (large) LLM download/load in the background.
+    /// Why Apple's model isn't in use (nil when it is).
+    public var appleFMStatus: String? {
+        appleFM.ready ? nil : appleFM.availabilityDescription
+    }
+
+    /// Warm the polish path: Apple's on-device model when available,
+    /// otherwise the bundled-model fallback (downloads on first use).
     public func warmLLM() async {
-        try? await llm.ensureLoaded()
+        if appleFM.ready {
+            await appleFM.warm()
+        } else {
+            try? await llm.ensureLoaded()
+        }
     }
 
     public func format(
@@ -43,11 +59,18 @@ public actor TranscriptFormatter {
         text = DictionaryCorrector.correct(text, terms: terms)
         // Latency gate: clean short dictations paste instantly; the LLM only
         // runs when there are fillers/backtracks/lists to fix or it's long.
-        if aiPolish, await llm.ready, !text.isEmpty, PolishGate.needsPolish(text) {
+        if aiPolish, !text.isEmpty, PolishGate.needsPolish(text) {
             let profile = AppCategories.profile(forBundleID: bundleID)
-            text = await llm.format(
-                text, tone: profile.tone, technical: profile.isTechnical,
-                preferredSpellings: DictionaryCorrector.relevantTerms(for: text, terms: terms))
+            let spellings = DictionaryCorrector.relevantTerms(for: text, terms: terms)
+            if appleFM.ready {
+                text = await appleFM.format(
+                    text, tone: profile.tone, technical: profile.isTechnical,
+                    preferredSpellings: spellings)
+            } else if await llm.ready {
+                text = await llm.format(
+                    text, tone: profile.tone, technical: profile.isTechnical,
+                    preferredSpellings: spellings)
+            }
             // The LLM can regress a spelling it saw in the raw text; re-assert.
             text = DictionaryCorrector.correct(text, terms: terms)
         }

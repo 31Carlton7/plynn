@@ -36,7 +36,7 @@ struct SettingsView: View {
             }
             Section("Formatting") {
                 Toggle("AI polish", isOn: $aiPolish)
-                Text("Removes filler words, applies self-corrections, formats lists, and matches tone to the app — fully on-device (Qwen3-4B, loads in the background on launch).")
+                Text("Removes filler words, applies self-corrections, formats lists, and matches tone to the app — on-device via Apple Intelligence. Custom model support is on the roadmap.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Learn from my corrections", isOn: $learnCorrections)

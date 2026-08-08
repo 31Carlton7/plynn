@@ -25,8 +25,27 @@ struct IndicatorView: View {
             }
             .frame(width: isCompact ? 56 : 360, height: 52)
             .clipShape(Capsule())
-            .glassEffect(.clear.tint(.white.opacity(0.06)).interactive(), in: .capsule)
+            .glassEffect(.regular.tint(.black.opacity(0.18)).interactive(), in: .capsule)
             .glassEffectID("capsule", in: glassNS)
+            // Explicit glass character — a bright rim light along the top edge
+            // and a soft specular sheen, visible on any background.
+            .overlay(
+                Capsule().strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.5), location: 0),
+                            .init(color: .white.opacity(0.06), location: 0.35),
+                            .init(color: .white.opacity(0.18), location: 1),
+                        ],
+                        startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1))
+            .overlay(
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.10), .clear],
+                            startPoint: .top, endPoint: .center))
+                    .allowsHitTesting(false))
         }
         .contentShape(Capsule())
         .onTapGesture { model.onTap?() }
@@ -139,9 +158,9 @@ private struct BottomWave: View {
     }
 
     private static let layers: [Layer] = [
-        .init(frequency: 1.3, speed: 1.9, ampScale: 1.00, baseHeight: 6, opacity: 0.26),
-        .init(frequency: 2.1, speed: -1.4, ampScale: 0.78, baseHeight: 5, opacity: 0.18),
-        .init(frequency: 3.4, speed: 2.7, ampScale: 0.55, baseHeight: 3, opacity: 0.12),
+        .init(frequency: 1.3, speed: 1.9, ampScale: 1.00, baseHeight: 6, opacity: 0.32),
+        .init(frequency: 2.1, speed: -1.4, ampScale: 0.78, baseHeight: 5, opacity: 0.22),
+        .init(frequency: 3.4, speed: 2.7, ampScale: 0.55, baseHeight: 3, opacity: 0.14),
     ]
 
     var body: some View {
@@ -151,11 +170,12 @@ private struct BottomWave: View {
                 // Typical speech RMS ~0.02–0.2 → 0…1 with a soft knee.
                 let drive = idle ? 0.12 : min(1, Double(level) * 8.5)
 
-                for layer in Self.layers {
-                    var path = Path()
+                for (index, layer) in Self.layers.enumerated() {
+                    var fill = Path()
+                    var crest = Path()
                     let amp = (size.height - layer.baseHeight)
                         * layer.ampScale * (0.10 + 0.90 * drive)
-                    path.move(to: CGPoint(x: 0, y: size.height))
+                    fill.move(to: CGPoint(x: 0, y: size.height))
                     let steps = 56
                     for i in 0...steps {
                         let progress = Double(i) / Double(steps)
@@ -166,11 +186,20 @@ private struct BottomWave: View {
                             + sin(progress * layer.frequency * 3.7 * .pi - t * layer.speed * 0.6)
                             * 0.3
                         let y = size.height - layer.baseHeight - max(0, wave) * amp
-                        path.addLine(to: CGPoint(x: x, y: y))
+                        fill.addLine(to: CGPoint(x: x, y: y))
+                        if i == 0 { crest.move(to: CGPoint(x: x, y: y)) }
+                        else { crest.addLine(to: CGPoint(x: x, y: y)) }
                     }
-                    path.addLine(to: CGPoint(x: size.width, y: size.height))
-                    path.closeSubpath()
-                    ctx.fill(path, with: .color(.white.opacity(layer.opacity)))
+                    fill.addLine(to: CGPoint(x: size.width, y: size.height))
+                    fill.closeSubpath()
+                    ctx.fill(fill, with: .color(.white.opacity(layer.opacity)))
+                    // Bright crest line on the front layer keeps the wave
+                    // legible even over light backgrounds.
+                    if index == 0 {
+                        ctx.stroke(
+                            crest, with: .color(.white.opacity(0.45)),
+                            style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+                    }
                 }
             }
         }
