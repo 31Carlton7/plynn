@@ -27,4 +27,11 @@ final class AudioFileTests: XCTestCase {
         XCTAssertTrue((15_800...16_200).contains(out.count), "got \(out.count) samples")  // ~1s at 16k
         XCTAssertGreaterThan(out.max() ?? 0, 0.5)
     }
+
+    func testRmsOfSineAndSilence() {
+        let sine = (0..<16_000).map { sinf(2 * .pi * 440 * Float($0) / 16_000) }
+        XCTAssertEqual(AudioLevel.rms(of: sine), 0.707, accuracy: 0.01)
+        XCTAssertEqual(AudioLevel.rms(of: [Float](repeating: 0, count: 1_000)), 0)
+        XCTAssertEqual(AudioLevel.rms(of: []), 0)
+    }
 }
