@@ -37,7 +37,10 @@ Also verify: hold fn + press an arrow key → must log "hold interrupted", no pa
 
 ## Verdict
 
-- [ ] GO — proceed to Phase 1
+- [x] GO — proceed to Phase 1
 - [ ] NO-GO — notes:
+
+Carlton ran the validation 2026-08-08: everything worked, latency feels instant. Detailed
+per-utterance numbers not recorded; qualitative pass on all criteria.
 
 ## Notes / feel
