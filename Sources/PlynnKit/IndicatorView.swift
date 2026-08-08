@@ -17,7 +17,7 @@ struct IndicatorView: View {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
                     BottomWave(level: model.level, idle: model.phase == .transcribing)
-                        .frame(height: 22)
+                        .frame(height: 26)
                 }
                 .opacity(waveOpacity)
 
@@ -25,7 +25,7 @@ struct IndicatorView: View {
             }
             .frame(width: isCompact ? 56 : 360, height: 52)
             .clipShape(Capsule())
-            .glassEffect(.regular.tint(.white.opacity(0.08)).interactive(), in: .capsule)
+            .glassEffect(.clear.tint(.white.opacity(0.06)).interactive(), in: .capsule)
             .glassEffectID("capsule", in: glassNS)
         }
         .contentShape(Capsule())
@@ -139,9 +139,9 @@ private struct BottomWave: View {
     }
 
     private static let layers: [Layer] = [
-        .init(frequency: 1.3, speed: 1.9, ampScale: 1.00, baseHeight: 5, opacity: 0.22),
-        .init(frequency: 2.1, speed: -1.4, ampScale: 0.75, baseHeight: 4, opacity: 0.15),
-        .init(frequency: 3.4, speed: 2.7, ampScale: 0.50, baseHeight: 3, opacity: 0.10),
+        .init(frequency: 1.3, speed: 1.9, ampScale: 1.00, baseHeight: 6, opacity: 0.26),
+        .init(frequency: 2.1, speed: -1.4, ampScale: 0.78, baseHeight: 5, opacity: 0.18),
+        .init(frequency: 3.4, speed: 2.7, ampScale: 0.55, baseHeight: 3, opacity: 0.12),
     ]
 
     var body: some View {
@@ -149,7 +149,7 @@ private struct BottomWave: View {
             Canvas { ctx, size in
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 // Typical speech RMS ~0.02–0.2 → 0…1 with a soft knee.
-                let drive = idle ? 0.10 : min(1, Double(level) * 7)
+                let drive = idle ? 0.12 : min(1, Double(level) * 8.5)
 
                 for layer in Self.layers {
                     var path = Path()
