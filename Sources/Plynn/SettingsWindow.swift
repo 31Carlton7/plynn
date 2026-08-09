@@ -83,10 +83,35 @@ struct SettingsPane: View {
                 Button("Open Setup…") { openOnboarding() }
             }
             Section {
+                HStack(spacing: 10) {
+                    socialButton("X / Twitter", "https://x.com/31carlton7")
+                    socialButton("Instagram", "https://instagram.com/31carlton7")
+                    socialButton("GitHub", "https://github.com/31Carlton7/plynn")
+                    Spacer()
+                    Button {
+                        NSWorkspace.shared.open(
+                            URL(string: "https://github.com/sponsors/31Carlton7")!)
+                    } label: {
+                        Label("Sponsor the Project", systemImage: "heart.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.pink)
+                }
+            } header: {
+                Text("Follow & Support")
+            }
+            Section {
                 LabeledContent("Version", value: "0.0.1")
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func socialButton(_ title: String, _ urlString: String) -> some View {
+        Button(title) {
+            NSWorkspace.shared.open(URL(string: urlString)!)
+        }
+        .buttonStyle(.bordered)
     }
 }
 
@@ -123,8 +148,8 @@ final class MainWindowController {
             w.center()
             window = w
         }
-        NSApp.setActivationPolicy(.regular)
+        // Stay .accessory: the window can front without a Dock icon appearing.
         window?.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

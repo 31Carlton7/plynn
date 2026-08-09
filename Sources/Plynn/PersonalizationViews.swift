@@ -17,6 +17,7 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
+                statCard(value: wpm, label: "Words/min")
                 statCard(value: "\(stats?.sessions ?? 0)", label: "Dictations")
                 statCard(value: "\(stats?.words ?? 0)", label: "Words")
                 statCard(
@@ -70,6 +71,24 @@ struct HomeView: View {
         .onAppear { reload() }
     }
 
+    private var wpm: String {
+        guard let stats, stats.seconds >= 10 else { return "—" }
+        return "\(Int((Double(stats.words) / stats.seconds * 60).rounded()))"
+    }
+
+    /// Static so row bodies never allocate a formatter.
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f
+    }()
+
+    /// Fuzzy, non-ticking timestamp: "just now", "5 min. ago", "2 hr. ago".
+    private func fuzzyTime(_ date: Date) -> String {
+        if Date().timeIntervalSince(date) < 90 { return "just now" }
+        return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
+    }
+
     private func statCard(value: String, label: String) -> some View {
         VStack(spacing: 4) {
             Text(value)
@@ -100,7 +119,7 @@ struct HomeView: View {
                 HStack(spacing: 6) {
                     Text(apps[entry.app]?.name ?? entry.app)
                     Text("·")
-                    (Text(entry.timestamp, style: .relative) + Text(" ago"))
+                    Text(fuzzyTime(entry.timestamp))
                     if entry.engine == "wispr-flow" {
                         Text("Wispr")
                             .padding(.horizontal, 5).padding(.vertical, 1)

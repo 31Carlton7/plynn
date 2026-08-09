@@ -107,8 +107,8 @@ final class OnboardingWindowController {
             w.center()
             window = w
         }
-        NSApp.setActivationPolicy(.regular)
+        // Stay .accessory: no Dock icon for a menu-bar app.
         window?.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

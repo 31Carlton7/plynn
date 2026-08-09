@@ -50,13 +50,18 @@ struct IndicatorView: View {
         .contentShape(Capsule())
         .onTapGesture { model.onTap?() }
         .animation(.spring(response: 0.38, dampingFraction: 0.82), value: model.phase)
+        // Fixed-width center-aligned stage: the capsule collapses toward its
+        // own center instead of snapping to the panel's leading edge.
+        .frame(width: 360, height: 52, alignment: .center)
         .padding(4)
     }
 
     private var waveOpacity: Double {
         switch model.phase {
-        case .recording, .transcribing: return 1
-        case .done, .secure: return 0
+        case .recording: return 1
+        // Off while polishing — the near-still wave reads as a smudge under
+        // the glass rather than motion.
+        case .transcribing, .done, .secure: return 0
         }
     }
 
@@ -228,10 +233,13 @@ private struct AnimatedCheckmark: View {
                 .white,
                 style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
             .frame(width: 20, height: 20)
-            .scaleEffect(popped ? 1 : 0.7)
+            .scaleEffect(popped ? 1 : 0.6)
+            .opacity(popped ? 1 : 0)
             .onAppear {
-                withAnimation(.easeOut(duration: 0.3).delay(0.12)) { progress = 1 }
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.6).delay(0.1)) {
+                // Wait out the capsule's shrink (spring response 0.38) so the
+                // check never draws against a still-moving boundary.
+                withAnimation(.easeOut(duration: 0.28).delay(0.3)) { progress = 1 }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7).delay(0.28)) {
                     popped = true
                 }
             }

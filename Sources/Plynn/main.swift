@@ -214,14 +214,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("plynn: [%@ latency] RSS %.0f MB — %@",
                       "\(releasedAt.duration(to: .now))", Metrics.residentMB(), text)
             }
-            Paster.paste(text)  // fires immediately — the check animates while it lands
+            Paster.paste(text)
             if pendingPressEnter {
                 pendingPressEnter = false
                 // After the paste chord (0.1 s delay + keystrokes) has landed.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { Paster.pressReturn() }
             }
             model.phase = .done
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) { [weak self] in
+            // Shrink (0.38 s spring) + delayed check draw (0.3 + 0.28 s) + hold.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self] in
                 guard let self, self.model.phase == .done else { return }
                 self.panel.hide()
             }
