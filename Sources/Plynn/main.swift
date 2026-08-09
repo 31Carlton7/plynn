@@ -32,7 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var releasedAt: ContinuousClock.Instant?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSLog("plynn: starting; RSS %.0f MB", Metrics.residentMB())
+        NSLog("plynn: starting; RSS %.0f MB; AX trusted: %d",
+              Metrics.residentMB(), AXIsProcessTrusted() ? 1 : 0)
         setUpStatusItem()
 
         if !Permissions.micGranted() || !Permissions.accessibilityGranted() {
