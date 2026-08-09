@@ -1,10 +1,46 @@
+import Observation
 import PlynnKit
 import ServiceManagement
 import SwiftUI
 
-struct SettingsView: View {
+enum MainTab: String, Hashable {
+    case home, dictionary, snippets, settings
+}
+
+@MainActor @Observable
+final class MainWindowModel {
+    var tab: MainTab = .home
+}
+
+struct MainView: View {
+    @Bindable var model: MainWindowModel
     @Bindable var engineManager: EngineManager
     let store: PersonalStore?
+    let openOnboarding: () -> Void
+
+    var body: some View {
+        TabView(selection: $model.tab) {
+            if let store {
+                HomeView(store: store)
+                    .tabItem { Label("Home", systemImage: "house") }
+                    .tag(MainTab.home)
+                DictionaryView(store: store)
+                    .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
+                    .tag(MainTab.dictionary)
+                SnippetsView(store: store)
+                    .tabItem { Label("Snippets", systemImage: "text.insert") }
+                    .tag(MainTab.snippets)
+            }
+            SettingsPane(engineManager: engineManager, openOnboarding: openOnboarding)
+                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag(MainTab.settings)
+        }
+        .frame(minWidth: 620, minHeight: 560)
+    }
+}
+
+struct SettingsPane: View {
+    @Bindable var engineManager: EngineManager
     @AppStorage("aiPolish") private var aiPolish = true
     @AppStorage("learnCorrections") private var learnCorrections = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -12,21 +48,6 @@ struct SettingsView: View {
     let openOnboarding: () -> Void
 
     var body: some View {
-        TabView {
-            general.tabItem { Label("General", systemImage: "gearshape") }
-            if let store {
-                DictionaryView(store: store)
-                    .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
-                SnippetsView(store: store)
-                    .tabItem { Label("Snippets", systemImage: "text.insert") }
-                HistoryView(store: store)
-                    .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
-            }
-        }
-        .frame(width: 480, height: 420)
-    }
-
-    private var general: some View {
         Form {
             Section("Transcription") {
                 Picker("Engine", selection: $engineManager.preferred) {
@@ -36,15 +57,13 @@ struct SettingsView: View {
                 }
                 LabeledContent("Status", value: engineManager.statusLine)
             }
-            Section("Formatting") {
+            Section {
                 Toggle("AI polish", isOn: $aiPolish)
-                Text("Removes filler words, applies self-corrections, formats lists, and matches tone to the app — on-device via Apple Intelligence. Custom model support is on the roadmap.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 Toggle("Learn from my corrections", isOn: $learnCorrections)
-                Text("When you fix a word right after a paste, Plynn adds it to your dictionary automatically. Everything stays on this Mac.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Formatting")
+            } footer: {
+                Text("Polish removes filler words, applies self-corrections, formats lists, and matches tone to the app — on-device via Apple Intelligence. Corrections you make right after a paste teach the dictionary automatically. Everything stays on this Mac.")
             }
             Section("General") {
                 Toggle("Launch at login", isOn: $launchAtLogin)
@@ -64,7 +83,7 @@ struct SettingsView: View {
                 Button("Open Setup…") { openOnboarding() }
             }
             Section {
-                LabeledContent("Version", value: "0.1 (Phase 1b)")
+                LabeledContent("Version", value: "0.0.1")
             }
         }
         .formStyle(.grouped)
@@ -72,8 +91,9 @@ struct SettingsView: View {
 }
 
 @MainActor
-final class SettingsWindowController {
+final class MainWindowController {
     private var window: NSWindow?
+    private let model = MainWindowModel()
     private let engineManager: EngineManager
     private let store: PersonalStore?
     private let openOnboarding: () -> Void
@@ -87,16 +107,19 @@ final class SettingsWindowController {
         self.openOnboarding = openOnboarding
     }
 
-    func show() {
+    func show(tab: MainTab) {
+        model.tab = store == nil ? .settings : tab
         if window == nil {
             let w = NSWindow(
                 contentRect: .zero,
-                styleMask: [.titled, .closable],
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered, defer: false)
-            w.title = "Plynn Settings"
+            w.title = "Plynn"
             w.isReleasedWhenClosed = false
-            w.contentView = NSHostingView(rootView: SettingsView(
-                engineManager: engineManager, store: store, openOnboarding: openOnboarding))
+            w.contentView = NSHostingView(rootView: MainView(
+                model: model, engineManager: engineManager,
+                store: store, openOnboarding: openOnboarding))
+            w.setContentSize(NSSize(width: 680, height: 600))
             w.center()
             window = w
         }

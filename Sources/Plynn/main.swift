@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = IndicatorModel()
     lazy var panel = IndicatorPanel(model: model)
     lazy var onboarding = OnboardingWindowController(engineManager: engineManager)
-    lazy var settings = SettingsWindowController(engineManager: engineManager, store: store) {
+    lazy var mainWindow = MainWindowController(engineManager: engineManager, store: store) {
         [weak self] in
         self?.onboarding.show()
     }
@@ -19,7 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     let store = try? PersonalStore(path: PersonalStore.defaultPath())
-    lazy var history = store.map { HistoryWindowController(store: $0) }
     lazy var formatter = TranscriptFormatter(personalization: { [store] in
         ((try? store?.snippets()) ?? [], (try? store?.terms()) ?? [])
     })
@@ -271,14 +270,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engineStateItem.isEnabled = false
         menu.addItem(engineStateItem)
         menu.addItem(.separator())
+        let openItem = NSMenuItem(
+            title: "Open Plynn", action: #selector(openHome), keyEquivalent: "o")
+        openItem.target = self
+        menu.addItem(openItem)
         let settingsItem = NSMenuItem(
             title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
-        let historyItem = NSMenuItem(
-            title: "History…", action: #selector(openHistory), keyEquivalent: "y")
-        historyItem.target = self
-        menu.addItem(historyItem)
         let setupItem = NSMenuItem(title: "Setup…", action: #selector(openSetup), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
@@ -294,26 +293,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
-    @objc func openSettings() { settings.show() }
+    @objc func openHome() { mainWindow.show(tab: .home) }
+    @objc func openSettings() { mainWindow.show(tab: .settings) }
     @objc func openSetup() { onboarding.show() }
-    @objc func openHistory() { history?.show() }
 
     /// Menu-bar app with no Dock icon: clicking Plynn.app in Finder/Launchpad
-    /// re-opens it — surface Settings so the click visibly does something.
+    /// re-opens it — surface the Home window so the click visibly does something.
     func applicationShouldHandleReopen(
         _ sender: NSApplication, hasVisibleWindows: Bool
     ) -> Bool {
-        if !hasVisibleWindows { settings.show() }
+        if !hasVisibleWindows { mainWindow.show(tab: .home) }
         return true
     }
 
-    /// plynn://settings | plynn://history | plynn://dictionary | plynn://setup
+    /// plynn://home | plynn://settings | plynn://dictionary | plynn://snippets | plynn://setup
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             switch url.host ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
-            case "history": history?.show()
+            case "settings": mainWindow.show(tab: .settings)
+            case "dictionary": mainWindow.show(tab: .dictionary)
+            case "snippets": mainWindow.show(tab: .snippets)
             case "setup": onboarding.show()
-            default: settings.show()  // settings, dictionary, anything else
+            default: mainWindow.show(tab: .home)  // home, history, anything else
             }
         }
     }
