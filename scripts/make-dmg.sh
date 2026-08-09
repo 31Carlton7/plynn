@@ -4,7 +4,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-./scripts/make-app.sh
+# SKIP_BUILD=1 packages the existing build/Plynn.app as-is — required after
+# notarize.sh, since rebuilding would discard the stapled ticket.
+if [[ "${SKIP_BUILD:-}" != "1" ]]; then
+  ./scripts/make-app.sh
+fi
 
 VERSION=$(defaults read "$PWD/build/Plynn.app/Contents/Info" CFBundleShortVersionString)
 STAGE="build/dmg-stage"
