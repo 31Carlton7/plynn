@@ -1,5 +1,7 @@
 # Plynn
 
+![Plynn: free, open source, 100% on-device dictation](docs/assets/hero.png)
+
 Dictation for your Mac that never touches the internet. Hold the fn key, talk, release, and clean text appears wherever your cursor is. Every part of it (speech recognition, AI cleanup, your dictionary, your history) runs on your Mac's own silicon.
 
 I built this because I loved what Wispr Flow could do but didn't love sending my voice to a server to do it. Turns out Apple Silicon is fast enough that you don't have to.

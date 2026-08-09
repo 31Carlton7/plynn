@@ -1,30 +1,30 @@
 # Installing Plynn
 
-## For users (the eventual flow)
+## For users
 
-1. **Download** `Plynn.dmg` from GitHub Releases (or `brew install --cask plynn`).
-2. **Drag Plynn to Applications** — standard DMG window with an Applications shortcut.
-3. **First launch** — Gatekeeper checks the notarization ticket; no warnings because the app is Developer ID signed and notarized.
-4. **Onboarding** walks through the two permissions Plynn needs:
-   - **Microphone** (system prompt) — to hear you.
-   - **Accessibility** (System Settings deep link) — for the fn hotkey and pasting.
-5. **Models download in the background** (~3 GB total: Parakeet ASR then Qwen3-4B polish). Dictation works the moment Parakeet lands (~1 GB); Apple's built-in engine covers the gap before that. AI polish switches on automatically when Qwen finishes.
-6. Optional: enable **Launch at login** in Settings.
+1. **Download** `Plynn.dmg` from GitHub Releases (a Homebrew cask is on the way).
+2. **Drag Plynn to Applications.** Standard DMG window with an Applications shortcut.
+3. **First launch.** Gatekeeper checks the notarization ticket, so there are no warnings to click through.
+4. **Onboarding** walks you through the two permissions Plynn needs:
+   - **Microphone** (a system prompt) so it can hear you.
+   - **Accessibility** (a System Settings deep link) for the fn hotkey and pasting.
+5. **Models download in the background**, about 3 GB total: the Parakeet recognizer first, then the polish model. Dictation works the moment Parakeet lands (about 1 GB), and Apple's built in engine covers the gap before that.
+6. Optional: turn on **Launch at login** in Settings.
 
-Updates ship via **Sparkle** (Phase 4): in-app "a new version is available," delta updates, signed appcast.
+Updates arrive through Sparkle: the app tells you when a new version exists and installs it in one click.
 
-## Release engineering (what we build, Phase 4)
+## Release engineering
 
-- `make-app.sh` → `xcodebuild` (Metal shaders require it) → signed .app with SPM resource bundles in `Contents/Resources`.
-- `xcrun notarytool submit` + `xcrun stapler staple` for notarization.
-- `create-dmg` (or `hdiutil`) for the drag-to-Applications DMG.
-- GitHub Actions release workflow + Homebrew cask once public.
+- `make-app.sh` builds with `xcodebuild` (the MLX Metal shaders require it) and produces a signed .app with SPM resource bundles in `Contents/Resources`.
+- `notarize.sh` submits to Apple with `notarytool` and staples the ticket.
+- `make-dmg.sh` packages the drag to Applications DMG. Pass `SKIP_BUILD=1` after notarizing so the stapled app is packaged as is.
+- `make-release.sh` runs the whole chain and publishes the GitHub release with a signed Sparkle appcast.
 
 ## For development
 
 ```bash
 ./scripts/make-app.sh            # build + sign into build/Plynn.app
-./scripts/make-app.sh --install  # …and replace /Applications/Plynn.app
+./scripts/make-app.sh --install  # and replace /Applications/Plynn.app
 ```
 
-Permissions survive reinstalls because TCC grants key on the bundle ID + the stable Developer ID signing certificate, not the binary hash.
+Permissions survive reinstalls because macOS keys them to the bundle ID and the stable Developer ID certificate, not the binary hash.
