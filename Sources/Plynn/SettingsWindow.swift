@@ -101,7 +101,10 @@ struct SettingsPane: View {
                 Text("Follow & Support")
             }
             Section {
-                LabeledContent("Version", value: "0.0.1")
+                LabeledContent(
+                    "Version",
+                    value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                        as? String ?? "dev")
             }
         }
         .formStyle(.grouped)
