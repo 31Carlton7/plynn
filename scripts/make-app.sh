@@ -24,6 +24,7 @@ mkdir -p "$APP/Contents/Frameworks"
 SPARKLE=$(find build/DerivedData -type d -name "Sparkle.framework" -not -path "*dSYM*" | head -1)
 ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
 cp scripts/Info.plist "$APP/Contents/Info.plist"
+cp scripts/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Plynn" 2>/dev/null || true
 codesign --force --options runtime \
   --sign "$IDENTITY" "$APP/Contents/Frameworks/Sparkle.framework"
