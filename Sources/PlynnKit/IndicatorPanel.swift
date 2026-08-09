@@ -10,6 +10,8 @@ public final class IndicatorModel {
         /// Success state: capsule closes in and a check mark draws on.
         case done
         case secure
+        /// The mic couldn't be opened (another app holds a reconfiguring device).
+        case micUnavailable
     }
     public var phase: Phase = .recording(handsFree: false)
     public var level: Float = 0

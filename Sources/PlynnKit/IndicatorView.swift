@@ -61,7 +61,7 @@ struct IndicatorView: View {
         case .recording: return 1
         // Off while polishing — the near-still wave reads as a smudge under
         // the glass rather than motion.
-        case .transcribing, .done, .secure: return 0
+        case .transcribing, .done, .secure, .micUnavailable: return 0
         }
     }
 
@@ -91,6 +91,14 @@ struct IndicatorView: View {
                 Image(systemName: "lock.shield.fill")
                     .foregroundStyle(.white.opacity(0.9))
                 Text("Secure field — dictation paused")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        case .micUnavailable:
+            HStack(spacing: 8) {
+                Image(systemName: "mic.slash.fill")
+                    .foregroundStyle(.white.opacity(0.9))
+                Text("Microphone in use by another app")
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.7))
             }

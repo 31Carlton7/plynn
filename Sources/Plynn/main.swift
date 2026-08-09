@@ -90,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Covers the no-effect paths back to idle (e.g. empty transcript → no
         // paste). The .done check state hides itself on a timer instead.
         if session.state == .idle, recorder == nil,
-            model.phase != .secure, model.phase != .done {
+            model.phase != .secure, model.phase != .done, model.phase != .micUnavailable {
             panel.hide()
         }
         refreshStatusIcon()
@@ -133,9 +133,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.model.level = max(level, self.model.level * 0.82)
                 }
             }
-            do { try r.start() } catch {
-                NSLog("plynn: mic error \(error)")
-                dispatch(.escape)  // tear the session back down
+            do {
+                try r.start()
+            } catch {
+                // A reconfiguring device (FaceTime/Zoom grabbing the mic) can
+                // fail the first open; one retry after a beat usually catches
+                // the settled format.
+                NSLog("plynn: mic error \(error) — retrying")
+                usleep(250_000)
+                do {
+                    try r.start()
+                } catch {
+                    NSLog("plynn: mic unavailable \(error)")
+                    model.phase = .micUnavailable
+                    recorder = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
+                        guard let self, self.model.phase == .micUnavailable else { return }
+                        self.panel.hide()
+                    }
+                    dispatch(.escape)  // tear the session back down
+                }
             }
 
         case .stopAndTranscribe:

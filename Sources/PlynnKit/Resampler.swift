@@ -1,9 +1,15 @@
 import AVFoundation
 
 public enum Resampler {
+    public enum ResampleError: Error { case noConverter }
+
     public static func convert(buffer: AVAudioPCMBuffer, to format: AVAudioFormat) throws -> [Float] {
         if buffer.format == format { return floats(from: buffer) }
-        let converter = AVAudioConverter(from: buffer.format, to: format)!
+        // Runs on the audio tap thread — a nil converter (exotic input layout
+        // when a device reconfigures) must throw, never crash the process.
+        guard let converter = AVAudioConverter(from: buffer.format, to: format) else {
+            throw ResampleError.noConverter
+        }
         let ratio = format.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount((Double(buffer.frameLength) * ratio).rounded(.up) + 1024)
         let outBuf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity)!
