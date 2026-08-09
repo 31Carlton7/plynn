@@ -39,6 +39,22 @@ public actor TranscriptFormatter {
         appleFM.ready ? nil : appleFM.availabilityDescription
     }
 
+    /// Command mode: apply a spoken instruction to selected text.
+    /// Nil = no engine or the transform failed — caller must touch nothing.
+    public func transform(selection: String, instruction: String) async -> String? {
+        let prompt = TransformPrompt.build(selectedText: selection, instruction: instruction)
+        let raw: String?
+        if appleFM.ready {
+            raw = await appleFM.complete(prompt)
+        } else if await llm.ready {
+            raw = await llm.complete(prompt)
+        } else {
+            return nil
+        }
+        let out = PolishPrompt.sanitize(raw, input: selection)
+        return out == selection ? nil : out
+    }
+
     /// Warm the polish path: Apple's on-device model when available,
     /// otherwise the bundled-model fallback (downloads on first use).
     public func warmLLM() async {

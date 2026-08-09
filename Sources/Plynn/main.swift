@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     })
     var pendingPressEnter = false
     var lastCaptureSeconds = 0.0
+    /// Non-nil when the session began with text selected → command mode.
+    var pendingSelection: String?
 
     var session = Session()
     var recorder: AudioRecorder?
@@ -102,6 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.level = 0
             panel.show()
 
+            pendingSelection = SelectionReader.selectedText()
+
             let (stream, continuation) = AsyncStream.makeStream(of: [Float].self)
             chunkContinuation = continuation
             let engine = engineManager.engineForNewSession()
@@ -146,9 +150,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let formatter = formatter
             let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             let aiPolish = UserDefaults.standard.object(forKey: "aiPolish") as? Bool ?? true
+            let selection = pendingSelection
+            pendingSelection = nil
             Task {
                 await feedTask?.value  // all chunks fed, in order
                 let raw = (try? await engine?.finish()) ?? ""
+
+                // Command mode: selection + spoken instruction → replace it.
+                if let selection, !raw.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let transformed = await formatter.transform(
+                        selection: selection, instruction: raw)
+                    await MainActor.run {
+                        self.pendingPressEnter = false
+                        if let transformed {
+                            try? self.store?.record(
+                                app: bundleID ?? "unknown", verbatim: raw,
+                                formatted: transformed,
+                                durationSeconds: self.lastCaptureSeconds, engine: "command")
+                            // Cmd-V replaces the still-active selection.
+                            self.dispatch(.transcriptReady(transformed))
+                        } else {
+                            NSLog("plynn: command transform failed — selection untouched")
+                            self.dispatch(.transcriptReady(""))
+                        }
+                    }
+                    return
+                }
+
                 let result = await formatter.format(raw, bundleID: bundleID, aiPolish: aiPolish)
                 await MainActor.run {
                     self.pendingPressEnter = result.pressEnter
@@ -167,6 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case .discardRecording:
+            pendingSelection = nil
             _ = recorder?.stop()
             recorder = nil
             chunkContinuation?.finish()
@@ -267,6 +296,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         if !hasVisibleWindows { settings.show() }
         return true
+    }
+
+    /// plynn://settings | plynn://history | plynn://dictionary | plynn://setup
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            switch url.host ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
+            case "history": history?.show()
+            case "setup": onboarding.show()
+            default: settings.show()  // settings, dictionary, anything else
+            }
+        }
     }
 
     private var currentIconName = ""

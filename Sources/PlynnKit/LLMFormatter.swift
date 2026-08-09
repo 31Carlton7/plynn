@@ -29,20 +29,24 @@ public actor LLMFormatter {
         model = container
     }
 
-    public func format(
-        _ text: String, tone: Tone, technical: Bool, preferredSpellings: [String] = []
-    ) async -> String {
-        guard let model else { return text }
-        let prompt = PolishPrompt.build(
-            transcript: text, tone: tone, technical: technical,
-            preferredSpellings: preferredSpellings)
-        let result: String? = await withTaskTimeout(seconds: 8) {
+    /// One stateless prompt → raw completion (nil on timeout/error/not loaded).
+    public func complete(_ prompt: String) async -> String? {
+        guard let model else { return nil }
+        return await withTaskTimeout(seconds: 10) {
             let session = ChatSession(
                 model,
                 generateParameters: GenerateParameters(maxTokens: 1024, temperature: 0))
             return try await session.respond(to: prompt)
         }
-        return PolishPrompt.sanitize(result, input: text)
+    }
+
+    public func format(
+        _ text: String, tone: Tone, technical: Bool, preferredSpellings: [String] = []
+    ) async -> String {
+        let prompt = PolishPrompt.build(
+            transcript: text, tone: tone, technical: technical,
+            preferredSpellings: preferredSpellings)
+        return PolishPrompt.sanitize(await complete(prompt), input: text)
     }
 
 }

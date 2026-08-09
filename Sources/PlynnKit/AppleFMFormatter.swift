@@ -32,17 +32,20 @@ public actor AppleFMFormatter {
         LanguageModelSession().prewarm()
     }
 
+    /// One stateless prompt → raw completion (nil on timeout/error/unavailable).
+    public func complete(_ prompt: String) async -> String? {
+        guard ready else { return nil }
+        return await withTaskTimeout(seconds: 10) {
+            try await LanguageModelSession().respond(to: prompt).content
+        }
+    }
+
     public func format(
         _ text: String, tone: Tone, technical: Bool, preferredSpellings: [String] = []
     ) async -> String {
-        guard ready else { return text }
         let prompt = PolishPrompt.build(
             transcript: text, tone: tone, technical: technical,
             preferredSpellings: preferredSpellings)
-        let result: String? = await withTaskTimeout(seconds: 8) {
-            let session = LanguageModelSession()  // stateless per dictation
-            return try await session.respond(to: prompt).content
-        }
-        return PolishPrompt.sanitize(result, input: text)
+        return PolishPrompt.sanitize(await complete(prompt), input: text)
     }
 }
