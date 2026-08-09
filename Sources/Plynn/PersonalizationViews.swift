@@ -179,6 +179,13 @@ struct HistoryView: View {
                         if copiedID == entry.id {
                             Text("Copied").foregroundStyle(.green)
                         }
+                        Button {
+                            copy(entry)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Copy transcription")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -198,7 +205,7 @@ struct HistoryView: View {
             }
             .padding(8)
         }
-        .frame(width: 440, height: 480)
+        .frame(minWidth: 420, minHeight: 380)  // flexible: standalone window or Settings tab
         .onAppear { reload() }
     }
 

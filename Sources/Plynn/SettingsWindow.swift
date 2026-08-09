@@ -19,6 +19,8 @@ struct SettingsView: View {
                     .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
                 SnippetsView(store: store)
                     .tabItem { Label("Snippets", systemImage: "text.insert") }
+                HistoryView(store: store)
+                    .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
             }
         }
         .frame(width: 480, height: 420)

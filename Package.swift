@@ -7,6 +7,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.5"),
         .package(url: "https://github.com/ml-explore/mlx-swift-examples.git", from: "2.29.1"),
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.6.0"),
     ],
     targets: [
         .target(
@@ -17,7 +18,10 @@ let package = Package(
             ]),
         .executableTarget(
             name: "Plynn",
-            dependencies: ["PlynnKit"]),
+            dependencies: [
+                "PlynnKit",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ]),
         .testTarget(
             name: "PlynnKitTests",
             dependencies: ["PlynnKit"],

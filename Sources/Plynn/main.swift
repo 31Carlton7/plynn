@@ -1,5 +1,6 @@
 import AppKit
 import PlynnKit
+import Sparkle
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -14,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.onboarding.show()
     }
     var statusItem: NSStatusItem!
+    let updater = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     let store = try? PersonalStore(path: PersonalStore.defaultPath())
     lazy var history = store.map { HistoryWindowController(store: $0) }
@@ -279,6 +282,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let setupItem = NSMenuItem(title: "Setup…", action: #selector(openSetup), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
+        let updateItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+            keyEquivalent: "")
+        updateItem.target = updater
+        menu.addItem(updateItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit Plynn", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))

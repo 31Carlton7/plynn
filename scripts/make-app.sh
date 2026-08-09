@@ -19,7 +19,14 @@ cp "$BUILT/Plynn" "$APP/Contents/MacOS/Plynn"
 for b in "$BUILT"/*.bundle; do
   cp -R "$b" "$APP/Contents/Resources/"
 done
+# Sparkle ships as a binary framework; it must live in Contents/Frameworks.
+mkdir -p "$APP/Contents/Frameworks"
+SPARKLE=$(find build/DerivedData -type d -name "Sparkle.framework" -not -path "*dSYM*" | head -1)
+ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
 cp scripts/Info.plist "$APP/Contents/Info.plist"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Plynn" 2>/dev/null || true
+codesign --force --options runtime \
+  --sign "$IDENTITY" "$APP/Contents/Frameworks/Sparkle.framework"
 codesign --force --options runtime --deep \
   --entitlements scripts/plynn.entitlements \
   --sign "$IDENTITY" "$APP"
