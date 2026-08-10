@@ -38,4 +38,32 @@ final class LLMFormatterTests: XCTestCase {
         let out = await llm.format("anything at all", tone: .neutral, technical: false)
         XCTAssertEqual(out, "anything at all")
     }
+
+    /// Regression: the timeout must fire on schedule even when the operation
+    /// cannot be cancelled. A task-group implementation waits for the straggler
+    /// no matter what `cancelAll()` says, which parked the whole dictation
+    /// session in `.transcribing` and killed every dictation after the first.
+    func testTimeoutFiresWhileOperationIgnoresCancellation() async {
+        let clock = ContinuousClock()
+        var result: String?
+        let elapsed = await clock.measure {
+            result = await withTaskTimeout(seconds: 0.3) {
+                // Resumed off a dispatch queue, so cancellation cannot touch it.
+                await withUnsafeContinuation { continuation in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+                        continuation.resume(returning: "too late")
+                    }
+                }
+            }
+        }
+        XCTAssertNil(result, "timeout should discard a late result")
+        XCTAssertLessThan(
+            elapsed, .seconds(1.5),
+            "withTaskTimeout waited for the uncancellable operation instead of its deadline")
+    }
+
+    func testTimeoutReturnsValueWhenOperationBeatsDeadline() async {
+        let result = await withTaskTimeout(seconds: 5) { "on time" }
+        XCTAssertEqual(result, "on time")
+    }
 }

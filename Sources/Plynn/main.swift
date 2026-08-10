@@ -34,6 +34,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var chunkContinuation: AsyncStream<[Float]>.Continuation?
     var feedTask: Task<Void, Never>?
     var releasedAt: ContinuousClock.Instant?
+    /// Safety net for `.transcribing`: the only ways out of that state are a
+    /// transcript or an escape, so anything that hangs downstream (engine,
+    /// polish model, paste) would otherwise wedge the app permanently —
+    /// every later fn press falls through `Session.handle`'s `default`.
+    var transcribeWatchdog: Task<Void, Never>?
+    /// Generous: polish alone is allowed 10 s. This is a last resort, not a
+    /// latency budget.
+    static let transcribeDeadline: Duration = .seconds(25)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSLog("plynn: starting; RSS %.0f MB; AX trusted: %d",
@@ -84,8 +92,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func dispatch(_ event: Session.Event) {
-        for effect in session.handle(event, at: .now) {
+        let effects = session.handle(event, at: .now)
+        for effect in effects {
             perform(effect)
+        }
+        if session.state != .transcribing {
+            transcribeWatchdog?.cancel()
+            transcribeWatchdog = nil
         }
         // Covers the no-effect paths back to idle (e.g. empty transcript → no
         // paste). The .done check state hides itself on a timer instead.
@@ -100,10 +113,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch effect {
         case .startRecording:
             let handsFree = session.state == .recording(.handsFree)
-            if handsFree { NSSound(named: "Pop")?.play() }
+            // Fire before the mic opens below, so the cue doesn't bleed into
+            // the first samples and get transcribed as noise.
+            Feedback.play(handsFree ? .lock : .start)
             model.phase = .recording(handsFree: handsFree)
             model.partial = ""
-            model.level = 0
+            model.resetLevels()
             panel.show()
 
             pendingSelection = SelectionReader.selectedText()
@@ -126,12 +141,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recorder = r
             r.onChunk = { [weak self] chunk in
                 continuation.yield(chunk)
-                let level = AudioLevel.rms(of: chunk)
-                Task { @MainActor in
-                    guard let self else { return }
-                    // Fast attack, slow release — keeps the ribbon fluid between chunks.
-                    self.model.level = max(level, self.model.level * 0.82)
-                }
+                // ~21 ms windows at 16 kHz: several envelope points per audio
+                // callback, so the wave moves at UI rate, not buffer rate.
+                let points = AudioLevel.envelope(of: chunk, windowSize: 336)
+                    .map(AudioLevel.normalized)
+                Task { @MainActor in self?.model.push(levels: points) }
             }
             do {
                 try r.start()
@@ -145,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try r.start()
                 } catch {
                     NSLog("plynn: mic unavailable \(error)")
+                    Feedback.play(.failure)
                     model.phase = .micUnavailable
                     recorder = nil
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
@@ -162,6 +177,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             chunkContinuation?.finish()
             chunkContinuation = nil
             model.phase = .transcribing
+            Feedback.play(.stop)
+            startTranscribeWatchdog()
             lastCaptureSeconds = Double(samples.count) / 16_000
             NSLog("plynn: captured %.1fs", lastCaptureSeconds)
             let feedTask = feedTask
@@ -190,6 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             self.dispatch(.transcriptReady(transformed))
                         } else {
                             NSLog("plynn: command transform failed — selection untouched")
+                            Feedback.play(.failure)
                             self.dispatch(.transcriptReady(""))
                         }
                     }
@@ -215,7 +233,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case .discardRecording:
             pendingSelection = nil
-            _ = recorder?.stop()
+            let discarded = recorder?.stop() ?? []
+            // Stay silent for the sub-minHold taps that also discard — including
+            // the first half of a hands-free double-tap, where a cancel cue
+            // immediately before the lock cue would just sound like a stutter.
+            if Double(discarded.count) / 16_000 > 0.35 { Feedback.play(.cancel) }
             recorder = nil
             chunkContinuation?.finish()
             chunkContinuation = nil
@@ -237,6 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // After the paste chord (0.1 s delay + keystrokes) has landed.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { Paster.pressReturn() }
             }
+            Feedback.play(.success)
             model.phase = .done
             // Shrink (0.38 s spring) + delayed check draw (0.3 + 0.28 s) + hold.
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self] in
@@ -309,6 +332,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(
             title: "Quit Plynn", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+
+    /// Drag the session back to `.idle` if a transcript never arrives, so one
+    /// bad dictation costs a dictation rather than the rest of the session.
+    /// Routed through the normal transitions (`.transcribing` → `.cancelled`
+    /// → `.idle`) so no state is reachable here that `Session` can't express.
+    func startTranscribeWatchdog() {
+        transcribeWatchdog?.cancel()
+        transcribeWatchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.transcribeDeadline)
+            guard !Task.isCancelled, let self, self.session.state == .transcribing
+            else { return }
+            NSLog("plynn: transcription stalled past %@ — resetting session",
+                  "\(Self.transcribeDeadline)")
+            Feedback.play(.failure)
+            dispatch(.escape)  // .transcribing → .cancelled
+            dispatch(.transcriptReady(""))  // .cancelled → .idle
+            panel.hide()
+        }
     }
 
     @objc func openHome() { mainWindow.show(tab: .home) }
