@@ -37,6 +37,14 @@ public final class HotkeyMonitor {
     private func handle(type: CGEventType, event: CGEvent) {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            // The tap was deaf for a moment. If fn was released during that
+            // window the fnUp is simply gone: this monitor still believes fn
+            // is held, so it will emit nothing on the next press and the
+            // session stays open forever. Resync against the live flags.
+            if fnIsDown && !NSEvent.modifierFlags.contains(.function) {
+                fnIsDown = false
+                onFnUp?()
+            }
             return
         }
         // The tap's run-loop source is attached to the MAIN run loop, so this

@@ -96,8 +96,15 @@ public actor AppleSpeechEngine: DictationEngine {
     public func finish() async throws -> String {
         inputBuilder?.finish()
         inputBuilder = nil
+        // Runs even when finalize throws — otherwise a failed session leaves a
+        // live analyzer and results loop behind for the next start() to fight.
+        defer {
+            resultsTask?.cancel()
+            resultsTask = nil
+            analyzer = nil
+            transcriber = nil
+        }
         try await analyzer?.finalizeAndFinishThroughEndOfInput()
-        resultsTask?.cancel()
         return finalText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

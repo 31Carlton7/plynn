@@ -43,6 +43,8 @@ struct SettingsPane: View {
     @Bindable var engineManager: EngineManager
     @AppStorage("aiPolish") private var aiPolish = true
     @AppStorage("learnCorrections") private var learnCorrections = true
+    @AppStorage("soundEffects") private var soundEffects = true
+    @AppStorage("haptics") private var haptics = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
     let openOnboarding: () -> Void
@@ -64,6 +66,16 @@ struct SettingsPane: View {
                 Text("Formatting")
             } footer: {
                 Text("Polish removes filler words, applies self-corrections, formats lists, and matches tone to the app — on-device via Apple Intelligence. Corrections you make right after a paste teach the dictionary automatically. Everything stays on this Mac.")
+            }
+            Section {
+                Toggle("Sound effects", isOn: $soundEffects)
+                    .onChange(of: soundEffects) { _, on in if on { Feedback.play(.success) } }
+                Toggle("Haptic feedback", isOn: $haptics)
+                    .onChange(of: haptics) { _, on in if on { Feedback.play(.lock) } }
+            } header: {
+                Text("Feedback")
+            } footer: {
+                Text("Cues for starting, locking hands-free, pasting, and cancelling — so you can dictate without watching the capsule. Haptics need a Force Touch trackpad.")
             }
             Section("General") {
                 Toggle("Launch at login", isOn: $launchAtLogin)

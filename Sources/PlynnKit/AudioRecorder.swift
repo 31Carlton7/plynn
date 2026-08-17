@@ -8,6 +8,41 @@ public enum AudioLevel {
         for s in samples { sum += s * s }
         return (sum / Float(samples.count)).squareRoot()
     }
+
+    /// RMS of each fixed-size window across the chunk.
+    ///
+    /// One value per audio callback moves the meter at buffer rate (~12 Hz),
+    /// which reads as laggy no matter how it's drawn. Slicing the same chunk
+    /// into short windows yields several envelope points per callback, so the
+    /// visualiser can run at UI rate off audio that already arrived.
+    public static func envelope(of samples: [Float], windowSize: Int) -> [Float] {
+        guard windowSize > 0, !samples.isEmpty else { return [] }
+        var points: [Float] = []
+        points.reserveCapacity(samples.count / windowSize + 1)
+        var start = 0
+        while start < samples.count {
+            let end = min(start + windowSize, samples.count)
+            var sum: Float = 0
+            for i in start..<end { sum += samples[i] * samples[i] }
+            points.append((sum / Float(end - start)).squareRoot())
+            start = end
+        }
+        return points
+    }
+
+    /// Perceptual 0…1 from a raw RMS.
+    ///
+    /// Speech lands roughly between −50 and −10 dBFS, and loudness is
+    /// logarithmic — scaling raw amplitude linearly leaves normal talking
+    /// hugging the floor and shouting pinned at the ceiling. Mapping the dB
+    /// range instead keeps the whole span of a voice visible.
+    public static func normalized(rms: Float) -> Float {
+        guard rms > 0 else { return 0 }
+        let db = 20 * log10(rms)
+        let floor: Float = -50
+        let ceiling: Float = -10
+        return min(1, max(0, (db - floor) / (ceiling - floor)))
+    }
 }
 
 public enum AudioError: Error {
