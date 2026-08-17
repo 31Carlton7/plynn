@@ -248,6 +248,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .cancelTranscription:
             panel.hide()
 
+        case .startMeeting:
+            NSLog("plynn: meeting start (wiring pending)")
+
+        case .stopMeeting:
+            NSLog("plynn: meeting stop (wiring pending)")
+
         case .paste(let text):
             if let releasedAt {
                 NSLog("plynn: [%@ latency] RSS %.0f MB — %@",

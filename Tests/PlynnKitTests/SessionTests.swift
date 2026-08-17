@@ -97,6 +97,112 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(s.state, .idle)
     }
 
+    // MARK: Triple-tap → meeting
+
+    /// tap, tap (locks hands-free), tap quickly → becomes a meeting instead.
+    /// The hands-free recording that the second tap started must be discarded,
+    /// never transcribed and pasted.
+    func testTripleTapStartsMeetingAndDiscardsHandsFree() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.fnDown, at: start)
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(100)))
+        XCTAssertEqual(s.handle(.fnDown, at: start.advanced(by: .milliseconds(250))), [.startRecording])
+        XCTAssertEqual(s.state, .recording(.handsFree))
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(350)))
+        // third tap, still inside the window → meeting
+        XCTAssertEqual(
+            s.handle(.fnDown, at: start.advanced(by: .milliseconds(500))),
+            [.discardRecording, .startMeeting])
+        XCTAssertEqual(s.state, .meeting)
+        // releasing fn during a meeting changes nothing
+        XCTAssertEqual(s.handle(.fnUp, at: start.advanced(by: .milliseconds(600))), [])
+        XCTAssertEqual(s.state, .meeting)
+    }
+
+    /// Regression guard: a deliberate single fn press well after the lock still
+    /// stops hands-free (the pre-existing behaviour) — only a *fast* third tap
+    /// escalates to a meeting.
+    func testSlowThirdPressStillStopsHandsFree() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.fnDown, at: start)
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(100)))
+        _ = s.handle(.fnDown, at: start.advanced(by: .milliseconds(250)))
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(350)))
+        XCTAssertEqual(s.handle(.fnDown, at: start.advanced(by: .seconds(5))), [.stopAndTranscribe])
+        XCTAssertEqual(s.state, .transcribing)
+    }
+
+    /// Triple-tap during a meeting stops it. Individual fn presses do not —
+    /// a meeting must never end because of one stray key.
+    func testTripleTapStopsMeeting() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.fnDown, at: start)
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(100)))
+        _ = s.handle(.fnDown, at: start.advanced(by: .milliseconds(250)))
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(350)))
+        _ = s.handle(.fnDown, at: start.advanced(by: .milliseconds(500)))
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(600)))
+        XCTAssertEqual(s.state, .meeting)
+
+        // Ten minutes in: a single press does nothing.
+        let later = start.advanced(by: .seconds(600))
+        XCTAssertEqual(s.handle(.fnDown, at: later), [])
+        XCTAssertEqual(s.handle(.fnUp, at: later.advanced(by: .milliseconds(100))), [])
+        XCTAssertEqual(s.state, .meeting)
+        // ...but a triple-tap ends it.
+        _ = s.handle(.fnDown, at: later.advanced(by: .milliseconds(250)))
+        _ = s.handle(.fnUp, at: later.advanced(by: .milliseconds(350)))
+        XCTAssertEqual(s.handle(.fnDown, at: later.advanced(by: .milliseconds(500))), [.stopMeeting])
+        XCTAssertEqual(s.state, .idle)
+    }
+
+    /// Escape during a meeting also stops it — but keeps the recording.
+    /// (Escape *discards* a dictation; a meeting is too valuable to lose.)
+    func testEscapeStopsMeetingWithoutDiscarding() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.fnDown, at: start)
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(100)))
+        _ = s.handle(.fnDown, at: start.advanced(by: .milliseconds(250)))
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(350)))
+        _ = s.handle(.fnDown, at: start.advanced(by: .milliseconds(500)))
+        XCTAssertEqual(s.state, .meeting)
+        XCTAssertEqual(s.handle(.escape, at: start.advanced(by: .seconds(60))), [.stopMeeting])
+        XCTAssertEqual(s.state, .idle)
+    }
+
+    /// Menu-bar "Stop meeting" (mouse) must work too.
+    func testStopRequestedStopsMeeting() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.fnDown, at: start)
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(100)))
+        _ = s.handle(.fnDown, at: start.advanced(by: .milliseconds(250)))
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(350)))
+        _ = s.handle(.fnDown, at: start.advanced(by: .milliseconds(500)))
+        XCTAssertEqual(s.handle(.stopRequested, at: start.advanced(by: .seconds(60))), [.stopMeeting])
+        XCTAssertEqual(s.state, .idle)
+    }
+
+    /// Secure input discards a *dictation* (it exists to keep text out of
+    /// password fields). A meeting never pastes, so a password prompt appearing
+    /// mid-call must not kill the recording.
+    func testSecureInputDoesNotStopMeeting() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.fnDown, at: start)
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(100)))
+        _ = s.handle(.fnDown, at: start.advanced(by: .milliseconds(250)))
+        _ = s.handle(.fnUp, at: start.advanced(by: .milliseconds(350)))
+        _ = s.handle(.fnDown, at: start.advanced(by: .milliseconds(500)))
+        XCTAssertEqual(s.state, .meeting)
+        XCTAssertEqual(s.handle(.secureInputChanged(true), at: start.advanced(by: .seconds(30))), [])
+        XCTAssertEqual(s.state, .meeting)
+    }
+
     func testStopRequestedStopsHandsFree() {
         var s = Session()
         let start = t0

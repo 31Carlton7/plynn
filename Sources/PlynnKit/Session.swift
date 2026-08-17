@@ -7,10 +7,15 @@ public struct Session: Sendable {
     public enum Mode: Equatable, Sendable { case pushToTalk, handsFree }
     public enum State: Equatable, Sendable {
         case idle, recording(Mode), transcribing, cancelled
+        /// Long-running meeting capture (mic + system audio). Started and
+        /// stopped by a triple-tap; individual fn presses are ignored so one
+        /// stray key can never end a meeting.
+        case meeting
     }
     public enum Event: Equatable, Sendable {
         case fnDown, fnUp, otherKeyDown, escape
-        /// Stop initiated from UI (clicking the indicator capsule in hands-free).
+        /// Stop initiated from UI (clicking the indicator capsule in hands-free,
+        /// or the "Stop meeting" menu item).
         case stopRequested
         case transcriptReady(String)
         case secureInputChanged(Bool)
@@ -18,6 +23,7 @@ public struct Session: Sendable {
     public enum Effect: Equatable, Sendable {
         case startRecording, stopAndTranscribe, discardRecording
         case cancelTranscription, paste(String)
+        case startMeeting, stopMeeting
     }
 
     /// fnUp sooner than this after fnDown = accidental tap (or first half of a double-tap).
@@ -30,6 +36,9 @@ public struct Session: Sendable {
     private var secureInput = false
     private var lastQuickTapUp: ContinuousClock.Instant?
     private var recordingStart: ContinuousClock.Instant?
+    /// When hands-free locked (the second tap). A third fnDown inside the tap
+    /// window of this instant is a triple-tap, not a stop.
+    private var handsFreeLockedAt: ContinuousClock.Instant?
 
     public init() {}
 
@@ -47,6 +56,7 @@ public struct Session: Sendable {
             guard !secureInput else { return [] }
             if let up = lastQuickTapUp, now < up.advanced(by: Self.doubleTapWindow) {
                 lastQuickTapUp = nil
+                handsFreeLockedAt = now
                 state = .recording(.handsFree)
                 return [.startRecording]
             }
@@ -55,6 +65,41 @@ public struct Session: Sendable {
             recordingStart = now
             state = .recording(.pushToTalk)
             return [.startRecording]
+
+        // Meeting: fn taps are inert unless they form a triple-tap. We reuse
+        // the same quick-tap timing so "triple-tap" means the same thing
+        // whether it starts or stops a meeting.
+        case (.meeting, .fnDown):
+            // Every press is a candidate quick tap, so fnUp can measure it.
+            recordingStart = now
+            if let up = lastQuickTapUp, now < up.advanced(by: Self.doubleTapWindow) {
+                // Second quick tap; a third fnDown inside the window ends it.
+                if let locked = handsFreeLockedAt,
+                    now < locked.advanced(by: Self.doubleTapWindow) {
+                    lastQuickTapUp = nil
+                    handsFreeLockedAt = nil
+                    state = .idle
+                    return [.stopMeeting]
+                }
+                handsFreeLockedAt = now
+                lastQuickTapUp = nil
+                return []
+            }
+            handsFreeLockedAt = nil
+            return []
+
+        case (.meeting, .fnUp):
+            let start = recordingStart ?? now
+            if now < start.advanced(by: Self.minHold) {
+                lastQuickTapUp = now
+            }
+            return []
+
+        case (.meeting, .escape), (.meeting, .stopRequested):
+            lastQuickTapUp = nil
+            handsFreeLockedAt = nil
+            state = .idle
+            return [.stopMeeting]
 
         case (.recording(.pushToTalk), .fnUp):
             let start = recordingStart ?? now
@@ -73,8 +118,22 @@ public struct Session: Sendable {
         case (.recording(.handsFree), .fnUp):
             return []  // release doesn't stop a locked session
 
-        case (.recording(.handsFree), .fnDown),
-            (.recording(.handsFree), .stopRequested):
+        case (.recording(.handsFree), .fnDown):
+            // A fast third tap right after the lock is a triple-tap → meeting.
+            // The hands-free recording it interrupts is discarded, never pasted.
+            if let locked = handsFreeLockedAt,
+                now < locked.advanced(by: Self.doubleTapWindow) {
+                handsFreeLockedAt = nil
+                lastQuickTapUp = nil
+                state = .meeting
+                return [.discardRecording, .startMeeting]
+            }
+            handsFreeLockedAt = nil
+            state = .transcribing
+            return [.stopAndTranscribe]
+
+        case (.recording(.handsFree), .stopRequested):
+            handsFreeLockedAt = nil
             state = .transcribing
             return [.stopAndTranscribe]
 
