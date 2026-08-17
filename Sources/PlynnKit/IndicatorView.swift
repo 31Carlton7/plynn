@@ -164,21 +164,19 @@ struct IndicatorView: View {
     }
 }
 
-/// The polish stage is the app buffing your words — so the label buffs
-/// itself, one glyph at a time.
-///
-/// A buff head travels along the word; each letter lifts, swells, brightens
-/// and catches an oil-slick tint as the head passes over it, then settles
-/// back. A gradient mask over flat text would have been the usual skeleton
-/// shimmer — animating the glyphs individually is what makes it read as
-/// something being worked on rather than something loading. Driven purely by
-/// the wall clock, so there is no state to leak or fall out of sync.
+/// The polish stage is the app quietly working on your words — a soft light
+/// sweeps once through "Polishing…", brightening each glyph a touch as it
+/// passes, then settles. Monochrome and understated on purpose: the earlier
+/// version lifted glyphs, cycled their hue, and threw sparkles off a glowing
+/// head, which read as gaudy rather than calm. This keeps the same idea (text
+/// being worked on, not a generic loading spinner) at a fraction of the
+/// amplitude. Driven purely by the wall clock, so there is no state to leak.
 struct PolishingLabel: View {
     private static let word = Array("Polishing…")
-    /// Seconds per pass — deliberate buffing, not a spinner in a hurry.
-    private static let period: Double = 1.9
-    /// How many glyphs the buff head covers at once.
-    private static let spread: Double = 1.7
+    /// Seconds per pass — slow and even, nothing to catch the eye.
+    private static let period: Double = 2.6
+    /// Wide spread means the brightening is a gentle glow, not a hot spot.
+    private static let spread: Double = 3.2
 
     var body: some View {
         TimelineView(.animation) { timeline in
@@ -187,17 +185,12 @@ struct PolishingLabel: View {
             let phase = (time.truncatingRemainder(dividingBy: Self.period)) / Self.period
             // Runs from fully before the first glyph to fully past the last,
             // so nothing pops at the wrap.
-            let head = -2.0 + phase * (count + 4)
+            let head = -3.0 + phase * (count + 6)
 
             HStack(spacing: 0) {
                 ForEach(Array(Self.word.enumerated()), id: \.offset) { index, character in
                     let distance = (Double(index) - head) / Self.spread
                     let heat = max(0, exp(-distance * distance))
-                    // Oil-slick sheen: hue drifts along the word and with
-                    // time, so no two passes shine the same colour.
-                    let hue = (0.54 + Double(index) * 0.02 + time * 0.06)
-                        .truncatingRemainder(dividingBy: 1)
-                    let tint = Color(hue: hue, saturation: 0.34 * heat, brightness: 1)
 
                     Text(String(character))
                         .font(
@@ -205,71 +198,10 @@ struct PolishingLabel: View {
                                 size: IndicatorMetrics.textSize, weight: .medium,
                                 design: .rounded)
                         )
-                        .foregroundStyle(tint.opacity(0.40 + 0.60 * heat))
-                        .shadow(color: .white.opacity(0.55 * heat), radius: 3.5 * heat)
-                        .offset(y: -2.4 * heat)
-                        .scaleEffect(1 + 0.16 * heat, anchor: .bottom)
+                        .foregroundStyle(.white.opacity(0.45 + 0.35 * heat))
                 }
             }
-            .overlay(alignment: .leading) { buffHead(head: head, count: count) }
         }
-    }
-
-    /// The pad itself: a soft glow with two sparkles catching its edge.
-    private func buffHead(head: Double, count: Double) -> some View {
-        GeometryReader { geometry in
-            let x = (head + 0.5) / count * geometry.size.width
-            let midline = geometry.size.height * 0.5
-            let onWord = head > -0.5 && head < count + 0.5
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [.white.opacity(0.30), .clear],
-                            center: .center, startRadius: 0, endRadius: 11))
-                    .frame(width: 22, height: 22)
-                    .position(x: x, y: midline)
-                Sparkle()
-                    .fill(.white)
-                    .frame(width: 5.5, height: 5.5)
-                    .blendMode(.plusLighter)
-                    .position(x: x + 1, y: geometry.size.height * 0.24)
-                Sparkle()
-                    .fill(.white.opacity(0.8))
-                    .frame(width: 3.2, height: 3.2)
-                    .blendMode(.plusLighter)
-                    .position(x: x - 6, y: geometry.size.height * 0.78)
-            }
-            .opacity(onWord ? 1 : 0)
-        }
-    }
-}
-
-/// Four-point sparkle with pinched arms — the classic "shine" glyph.
-private struct Sparkle: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let centre = CGPoint(x: rect.midX, y: rect.midY)
-        let armX = rect.width / 2
-        let armY = rect.height / 2
-        // Low waist pulls the arms into needles instead of a diamond.
-        let waist: CGFloat = 0.16
-
-        path.move(to: CGPoint(x: centre.x, y: centre.y - armY))
-        path.addQuadCurve(
-            to: CGPoint(x: centre.x + armX, y: centre.y),
-            control: CGPoint(x: centre.x + armX * waist, y: centre.y - armY * waist))
-        path.addQuadCurve(
-            to: CGPoint(x: centre.x, y: centre.y + armY),
-            control: CGPoint(x: centre.x + armX * waist, y: centre.y + armY * waist))
-        path.addQuadCurve(
-            to: CGPoint(x: centre.x - armX, y: centre.y),
-            control: CGPoint(x: centre.x - armX * waist, y: centre.y + armY * waist))
-        path.addQuadCurve(
-            to: CGPoint(x: centre.x, y: centre.y - armY),
-            control: CGPoint(x: centre.x - armX * waist, y: centre.y - armY * waist))
-        path.closeSubpath()
-        return path
     }
 }
 
