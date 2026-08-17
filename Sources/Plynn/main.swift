@@ -27,6 +27,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Non-nil when the session began with text selected → command mode.
     var pendingSelection: String?
 
+    // Meeting mode
+    var meetingRecorder: MeetingRecorder?
+    var meetingEngine: (any DictationEngine)?
+    var meetingContinuation: AsyncStream<[Float]>.Continuation?
+    var meetingFeedTask: Task<Void, Never>?
+    var meetingTranscript = MeetingTranscript()
+    var meetingID: Int64?
+    var meetingTimer: Timer?
+
     var session = Session()
     var recorder: AudioRecorder?
     /// Engine chosen at session start; never swapped mid-session.
@@ -103,7 +112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Covers the no-effect paths back to idle (e.g. empty transcript → no
         // paste). The .done check state hides itself on a timer instead.
         if session.state == .idle, recorder == nil,
-            model.phase != .secure, model.phase != .done, model.phase != .micUnavailable {
+            model.phase != .secure, model.phase != .done, model.phase != .micUnavailable,
+            model.phase != .meetingSaved {
             panel.hide()
         }
         refreshStatusIcon()
@@ -249,10 +259,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel.hide()
 
         case .startMeeting:
-            NSLog("plynn: meeting start (wiring pending)")
+            startMeeting()
 
         case .stopMeeting:
-            NSLog("plynn: meeting stop (wiring pending)")
+            stopMeeting()
 
         case .paste(let text):
             if let releasedAt {
@@ -274,6 +284,157 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             scheduleCorrectionCheck(pasted: text)
         }
+    }
+
+    // MARK: Meeting mode
+
+    func startMeeting() {
+        Feedback.play(.lock)
+        model.resetLevels()
+        model.phase = .meeting(elapsed: 0)
+        panel.show()
+        meetingTranscript = MeetingTranscript()
+
+        let started = Date()
+        let title = Self.defaultMeetingTitle(started)
+        meetingID = try? store?.addMeeting(title: title, startedAt: started)
+
+        // Meetings always run on Parakeet: it streams and has no session cap.
+        let engine = engineManager.engineForNewSession()
+        meetingEngine = engine
+        let (stream, continuation) = AsyncStream.makeStream(of: [Float].self)
+        meetingContinuation = continuation
+        meetingFeedTask = Task {
+            try? await engine.start()
+            await engine.setPartialCallback { [weak self] text in
+                Task { @MainActor in self?.meetingPartial(text) }
+            }
+            for await chunk in stream {
+                try? await engine.append(samples: chunk)
+            }
+        }
+
+        let recorder = MeetingRecorder()
+        meetingRecorder = recorder
+        recorder.onChunk = { [weak self] chunk in
+            continuation.yield(chunk)
+            let points = AudioLevel.envelope(of: chunk, windowSize: 1_600).map(AudioLevel.normalized)
+            Task { @MainActor in self?.model.push(levels: points) }
+        }
+        recorder.onFailure = { [weak self] error in
+            NSLog("plynn: meeting stream failed: \(error)")
+            Task { @MainActor in self?.dispatch(.stopRequested) }
+        }
+        Task {
+            do {
+                try await recorder.start()
+            } catch {
+                NSLog("plynn: meeting could not start: \(error)")
+                await MainActor.run {
+                    self.model.phase = .micUnavailable
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                        guard let self, self.model.phase == .micUnavailable else { return }
+                        self.panel.hide()
+                    }
+                    self.tearDownMeeting(save: false)
+                    self.dispatch(.stopRequested)
+                }
+            }
+        }
+
+        meetingTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, case .meeting = self.model.phase else { return }
+                self.model.phase = .meeting(elapsed: Int(self.meetingRecorder?.elapsed ?? 0))
+            }
+        }
+    }
+
+    /// Streaming partial: keep the latest text as the running tail; commit a
+    /// segment whenever the engine's partial resets (i.e. it finalized).
+    private var meetingLastPartial = ""
+    private var meetingSegmentStart: TimeInterval = 0
+    func meetingPartial(_ text: String) {
+        let elapsed = meetingRecorder?.elapsed ?? 0
+        // Parakeet's partial grows monotonically within an utterance and
+        // shrinks when a new one starts — the shrink is our segment boundary.
+        if text.count < meetingLastPartial.count, !meetingLastPartial.isEmpty {
+            meetingTranscript.append(meetingLastPartial, at: meetingSegmentStart)
+            meetingSegmentStart = elapsed
+        } else if meetingLastPartial.isEmpty {
+            meetingSegmentStart = elapsed
+        }
+        meetingLastPartial = text
+    }
+
+    func stopMeeting() {
+        guard meetingRecorder != nil else { return }
+        Feedback.play(.success)
+        model.phase = .meetingSaved
+        let recorder = meetingRecorder
+        let engine = meetingEngine
+        let feed = meetingFeedTask
+        meetingContinuation?.finish()
+        meetingTimer?.invalidate()
+        meetingTimer = nil
+        let elapsed = recorder?.elapsed ?? 0
+        let id = meetingID
+        let started = recorder?.startedAt ?? Date()
+        let title = Self.defaultMeetingTitle(started)
+
+        Task {
+            await recorder?.stop()
+            await feed?.value
+            let final = (try? await engine?.finish()) ?? ""
+            await MainActor.run {
+                // Whatever the engine flushed at the end is the last segment.
+                let tail = final.isEmpty ? self.meetingLastPartial : final
+                if !tail.isEmpty {
+                    self.meetingTranscript.append(tail, at: self.meetingSegmentStart)
+                }
+                self.meetingLastPartial = ""
+                self.tearDownMeeting(save: false)
+            }
+            let transcript = await MainActor.run { self.meetingTranscript }
+            guard let id, let store = self.store else { return }
+            try? store.updateMeeting(
+                id: id, transcript: transcript.plainText,
+                durationSeconds: elapsed, status: .summarizing)
+
+            // Summarize in the background; the pill has already moved on.
+            let formatter = self.formatter
+            let notes = await MeetingSummarizer.summarize(
+                transcript, title: title,
+                complete: { await formatter.complete($0) })
+            let body = notes ?? MeetingSummarizer.pendingNote(
+                title: title, transcriptWords: transcript.wordCount)
+            try? store.updateMeeting(id: id, notes: body, status: notes == nil ? .failed : .ready)
+            try? store.writeMarkdownFile(
+                title: title, startedAt: started, notes: body,
+                transcript: transcript.plainText)
+            NSLog("plynn: meeting %lld saved (%@)", id, notes == nil ? "summary pending" : "notes ready")
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
+            guard let self, self.model.phase == .meetingSaved else { return }
+            self.panel.hide()
+        }
+    }
+
+    private func tearDownMeeting(save: Bool) {
+        meetingRecorder = nil
+        meetingEngine = nil
+        meetingContinuation = nil
+        meetingFeedTask = nil
+        meetingTimer?.invalidate()
+        meetingTimer = nil
+        meetingID = save ? meetingID : nil
+    }
+
+    static func defaultMeetingTitle(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE h:mm a"
+        return "Meeting, \(f.string(from: date))"
     }
 
     /// A few seconds after a paste, re-read the focused field and learn
@@ -307,6 +468,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     var engineStateItem: NSMenuItem!
+    var meetingItem: NSMenuItem!
 
     func setUpStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -328,6 +490,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let setupItem = NSMenuItem(title: "Setup…", action: #selector(openSetup), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
+        meetingItem = NSMenuItem(
+            title: "Start Meeting Notes", action: #selector(toggleMeeting), keyEquivalent: "m")
+        meetingItem.target = self
+        menu.addItem(meetingItem)
+        menu.addItem(.separator())
         let updateItem = NSMenuItem(
             title: "Check for Updates…",
             action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
@@ -360,6 +527,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func openHome() { mainWindow.show(tab: .home) }
+    @objc func toggleMeeting() {
+        if session.state == .meeting {
+            dispatch(.stopRequested)
+        } else if session.state == .idle {
+            // Drive the state machine the same way triple-tap does, so the
+            // menu can never desync from the keyboard path.
+            let now = ContinuousClock.now
+            _ = session.handle(.fnDown, at: now)
+            _ = session.handle(.fnUp, at: now.advanced(by: .milliseconds(50)))
+            _ = session.handle(.fnDown, at: now.advanced(by: .milliseconds(100)))
+            _ = session.handle(.fnUp, at: now.advanced(by: .milliseconds(150)))
+            for effect in session.handle(.fnDown, at: now.advanced(by: .milliseconds(200))) {
+                perform(effect)
+            }
+            refreshStatusIcon()
+        }
+    }
     @objc func openSettings() { mainWindow.show(tab: .settings) }
     @objc func openSetup() { onboarding.show() }
 
@@ -391,6 +575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let name: String
         switch session.state {
         case .recording: name = "mic.fill"
+        case .meeting: name = "record.circle"
         case .transcribing: name = "waveform"
         default: name = "mic"
         }
@@ -404,6 +589,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         engineStateItem.title = engineManager.statusLine
+        meetingItem.title = session.state == .meeting ? "Stop Meeting Notes" : "Start Meeting Notes"
     }
 }
 

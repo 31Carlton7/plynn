@@ -154,7 +154,7 @@ public enum MeetingSummarizer {
     /// if any step yields nothing usable.
     public static func summarize(
         _ transcript: MeetingTranscript, title: String,
-        complete: (String) async -> String?
+        complete: @Sendable (String) async -> String?
     ) async -> String? {
         let chunks = chunk(transcript.prose, maxWords: chunkWords)
         guard !chunks.isEmpty else { return nil }

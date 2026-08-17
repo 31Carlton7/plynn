@@ -85,10 +85,10 @@ struct IndicatorView: View {
 
     private var waveOpacity: Double {
         switch model.phase {
-        case .recording: return 1
+        case .recording, .meeting: return 1
         // Off while polishing — the near-still wave reads as a smudge under
         // the glass rather than motion.
-        case .transcribing, .done, .secure, .micUnavailable: return 0
+        case .transcribing, .done, .secure, .micUnavailable, .meetingSaved: return 0
         }
     }
 
@@ -129,6 +129,33 @@ struct IndicatorView: View {
                 Text("Microphone in use by another app")
                     .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(.horizontal, IndicatorMetrics.inset)
+        case .meeting(let elapsed):
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 8, height: 8)
+                    .modifier(RecordingPulse())
+                Text("Recording meeting")
+                    .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.85))
+                Text(Self.clock(elapsed))
+                    .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.55))
+                    .contentTransition(.numericText())
+            }
+            .padding(.horizontal, IndicatorMetrics.inset)
+        case .meetingSaved:
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("Meeting saved — writing notes…")
+                    .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.75))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -432,5 +459,24 @@ private struct AnimatedCheckmark: View {
             p.addLine(to: CGPoint(x: rect.minX + rect.width * 0.95, y: rect.minY + rect.height * 0.18))
             return p
         }
+    }
+}
+
+extension IndicatorView {
+    /// mm:ss, or h:mm:ss past an hour.
+    static func clock(_ seconds: Int) -> String {
+        let h = seconds / 3600, m = (seconds % 3600) / 60, s = seconds % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%02d:%02d", m, s)
+    }
+}
+
+/// Slow breathing on the recording dot — reads as "live" without shouting.
+private struct RecordingPulse: ViewModifier {
+    @State private var on = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(on ? 1 : 0.35)
+            .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: on)
+            .onAppear { on = true }
     }
 }

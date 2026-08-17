@@ -39,6 +39,14 @@ public actor TranscriptFormatter {
         appleFM.ready ? nil : appleFM.availabilityDescription
     }
 
+    /// Raw completion on whichever polish engine is live — the summarizer's
+    /// backend. Nil when no engine is available.
+    public func complete(_ prompt: String) async -> String? {
+        if appleFM.ready { return await appleFM.complete(prompt) }
+        if await llm.ready { return await llm.complete(prompt) }
+        return nil
+    }
+
     /// Command mode: apply a spoken instruction to selected text.
     /// Nil = no engine or the transform failed — caller must touch nothing.
     public func transform(selection: String, instruction: String) async -> String? {

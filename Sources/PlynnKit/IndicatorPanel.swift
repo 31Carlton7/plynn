@@ -12,6 +12,10 @@ public final class IndicatorModel {
         case secure
         /// The mic couldn't be opened (another app holds a reconfiguring device).
         case micUnavailable
+        /// A meeting is being recorded; `elapsed` is whole seconds so far.
+        case meeting(elapsed: Int)
+        /// Meeting ended, transcript saved, notes being written in the background.
+        case meetingSaved
     }
     public var phase: Phase = .recording(handsFree: false)
     /// Number of envelope points held across the width of the waveform.
