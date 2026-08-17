@@ -98,6 +98,57 @@ final class PersonalStoreTests: XCTestCase {
         XCTAssertEqual(try store.stats().sessions, 0)
     }
 
+    // MARK: Meetings
+
+    func testMeetingLifecycle() throws {
+        let id = try store.addMeeting(title: "Design sync", startedAt: Date(timeIntervalSince1970: 1_000))
+        var m = try XCTUnwrap(try store.meeting(id: id))
+        XCTAssertEqual(m.title, "Design sync")
+        XCTAssertEqual(m.status, .recording)
+        XCTAssertEqual(m.transcript, "")
+        XCTAssertNil(m.notes)
+
+        try store.updateMeeting(
+            id: id, transcript: "[00:00] hi", durationSeconds: 90, status: .summarizing)
+        m = try XCTUnwrap(try store.meeting(id: id))
+        XCTAssertEqual(m.transcript, "[00:00] hi")
+        XCTAssertEqual(m.durationSeconds, 90, accuracy: 0.01)
+        XCTAssertEqual(m.status, .summarizing)
+
+        try store.updateMeeting(id: id, notes: "# Design sync\n\n## TL;DR\nGood.", status: .ready)
+        m = try XCTUnwrap(try store.meeting(id: id))
+        XCTAssertEqual(m.notes, "# Design sync\n\n## TL;DR\nGood.")
+        XCTAssertEqual(m.status, .ready)
+
+        try store.deleteMeeting(id: id)
+        XCTAssertNil(try store.meeting(id: id))
+    }
+
+    func testMeetingsListNewestFirst() throws {
+        _ = try store.addMeeting(title: "Old", startedAt: Date(timeIntervalSince1970: 100))
+        _ = try store.addMeeting(title: "New", startedAt: Date(timeIntervalSince1970: 200))
+        let list = try store.meetings()
+        XCTAssertEqual(list.map(\.title), ["New", "Old"])
+    }
+
+    func testMeetingMarkdownFileWritten() throws {
+        let dir = NSTemporaryDirectory() + "plynn-notes-\(UUID().uuidString)"
+        let url = try store.writeMarkdownFile(
+            title: "Weekly / Sync: Q3?", startedAt: Date(timeIntervalSince1970: 0),
+            notes: "# Weekly\n\nhello", transcript: "[00:00] hello", directory: dir)
+        let content = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(content.hasPrefix("# Weekly"))
+        XCTAssertTrue(content.contains("## Transcript"))
+        XCTAssertTrue(content.contains("[00:00] hello"))
+        // Filename is filesystem-safe: no slashes/colons/question marks.
+        let name = url.lastPathComponent
+        XCTAssertFalse(name.contains("/"))
+        XCTAssertFalse(name.contains(":"))
+        XCTAssertFalse(name.contains("?"))
+        XCTAssertTrue(name.hasSuffix(".md"))
+        try? FileManager.default.removeItem(atPath: dir)
+    }
+
     func testPersistsAcrossReopen() throws {
         _ = try store.addTerm(text: "Plynn", aliases: ["plin"])
         store = nil

@@ -26,6 +26,17 @@ public final class PersonalStore: @unchecked Sendable {
         public let engine: String
     }
 
+    public struct Meeting: Identifiable, Equatable, Sendable {
+        public enum Status: String, Sendable { case recording, summarizing, ready, failed }
+        public let id: Int64
+        public let title: String
+        public let startedAt: Date
+        public let durationSeconds: Double
+        public let transcript: String
+        public let notes: String?
+        public let status: Status
+    }
+
     public struct Stats: Equatable, Sendable {
         public let sessions: Int
         public let words: Int
@@ -57,6 +68,10 @@ public final class PersonalStore: @unchecked Sendable {
                 id INTEGER PRIMARY KEY, ts REAL NOT NULL, app TEXT NOT NULL,
                 verbatim TEXT NOT NULL, formatted TEXT NOT NULL,
                 duration_s REAL NOT NULL, engine TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS meetings(
+                id INTEGER PRIMARY KEY, title TEXT NOT NULL, started REAL NOT NULL,
+                duration_s REAL NOT NULL DEFAULT 0, transcript TEXT NOT NULL DEFAULT '',
+                notes TEXT, status TEXT NOT NULL);
             """)
     }
 
@@ -198,6 +213,96 @@ public final class PersonalStore: @unchecked Sendable {
 
     public func clearHistory() throws {
         try queue.sync { try run("DELETE FROM history") }
+    }
+
+    // MARK: Meetings
+
+    @discardableResult
+    public func addMeeting(title: String, startedAt: Date) throws -> Int64 {
+        try queue.sync {
+            try run(
+                "INSERT INTO meetings(title, started, status) VALUES(?,?,?)",
+                bind: [.text(title), .real(startedAt.timeIntervalSince1970),
+                       .text(Meeting.Status.recording.rawValue)])
+            return sqlite3_last_insert_rowid(db)
+        }
+    }
+
+    public func updateMeeting(
+        id: Int64, transcript: String? = nil, durationSeconds: Double? = nil,
+        notes: String? = nil, status: Meeting.Status? = nil
+    ) throws {
+        try queue.sync {
+            var sets: [String] = []
+            var binds: [Value] = []
+            if let transcript { sets.append("transcript = ?"); binds.append(.text(transcript)) }
+            if let durationSeconds { sets.append("duration_s = ?"); binds.append(.real(durationSeconds)) }
+            if let notes { sets.append("notes = ?"); binds.append(.text(notes)) }
+            if let status { sets.append("status = ?"); binds.append(.text(status.rawValue)) }
+            guard !sets.isEmpty else { return }
+            binds.append(.int(id))
+            try run("UPDATE meetings SET \(sets.joined(separator: ", ")) WHERE id = ?", bind: binds)
+        }
+    }
+
+    public func meeting(id: Int64) throws -> Meeting? {
+        try queue.sync {
+            try query(
+                "SELECT id, title, started, duration_s, transcript, notes, status FROM meetings WHERE id = ?",
+                bind: [.int(id)], transform: meetingRow).first
+        }
+    }
+
+    public func meetings() throws -> [Meeting] {
+        try queue.sync {
+            try query(
+                "SELECT id, title, started, duration_s, transcript, notes, status FROM meetings ORDER BY started DESC",
+                transform: meetingRow)
+        }
+    }
+
+    public func deleteMeeting(id: Int64) throws {
+        try queue.sync { try run("DELETE FROM meetings WHERE id = ?", bind: [.int(id)]) }
+    }
+
+    private func meetingRow(_ s: OpaquePointer) -> Meeting {
+        Meeting(
+            id: sqlite3_column_int64(s, 0),
+            title: column(s, 1),
+            startedAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 2)),
+            durationSeconds: sqlite3_column_double(s, 3),
+            transcript: column(s, 4),
+            notes: sqlite3_column_type(s, 5) == SQLITE_NULL ? nil : column(s, 5),
+            status: Meeting.Status(rawValue: column(s, 6)) ?? .failed)
+    }
+
+    /// Notes directory: plain .md files the user owns, next to the database.
+    public static func meetingsDirectory() -> String {
+        let dir = (defaultPath() as NSString).deletingLastPathComponent + "/Meetings"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Writes `<yyyy-MM-dd HH.mm> <title>.md` containing the note followed by
+    /// the full transcript. Returns the file URL.
+    @discardableResult
+    public func writeMarkdownFile(
+        title: String, startedAt: Date, notes: String, transcript: String,
+        directory: String? = nil
+    ) throws -> URL {
+        let dir = directory ?? Self.meetingsDirectory()
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd HH.mm"
+        // Strip filesystem-hostile characters; collapse whitespace.
+        let safeTitle = title.components(separatedBy: CharacterSet(charactersIn: "/\\:?*\"<>|"))
+            .joined(separator: " ")
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let name = "\(fmt.string(from: startedAt)) \(safeTitle.isEmpty ? "Meeting" : safeTitle).md"
+        let url = URL(fileURLWithPath: dir).appendingPathComponent(name)
+        let body = notes + "\n\n---\n\n## Transcript\n\n" + transcript + "\n"
+        try body.write(to: url, atomically: true, encoding: .utf8)
+        return url
     }
 
     // MARK: SQLite plumbing
