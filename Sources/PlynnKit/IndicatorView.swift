@@ -321,11 +321,11 @@ private struct BottomWave: View {
     /// Frequencies are deliberately non-harmonic — harmonically related ones
     /// line their crests up into a visibly repeating pattern.
     private static let layers: [Layer] = [
-        .init(frequency: 1.3, speed: 1.9, ampScale: 1.00, baseHeight: 3.4, opacity: 0.40),
-        .init(frequency: 2.1, speed: -1.4, ampScale: 0.82, baseHeight: 2.7, opacity: 0.31),
-        .init(frequency: 3.4, speed: 2.7, ampScale: 0.60, baseHeight: 2.0, opacity: 0.23),
-        .init(frequency: 5.3, speed: -3.6, ampScale: 0.40, baseHeight: 1.3, opacity: 0.15),
-        .init(frequency: 7.7, speed: 4.4, ampScale: 0.26, baseHeight: 0.8, opacity: 0.10),
+        .init(frequency: 1.3, speed: 1.4, ampScale: 1.00, baseHeight: 3.4, opacity: 0.40),
+        .init(frequency: 2.1, speed: -1.05, ampScale: 0.82, baseHeight: 2.7, opacity: 0.31),
+        .init(frequency: 3.4, speed: 2.0, ampScale: 0.60, baseHeight: 2.0, opacity: 0.23),
+        .init(frequency: 5.3, speed: -2.7, ampScale: 0.40, baseHeight: 1.3, opacity: 0.15),
+        .init(frequency: 7.7, speed: 3.3, ampScale: 0.26, baseHeight: 0.8, opacity: 0.10),
     ]
 
     /// Loudness across the band, interpolated between stored points so the
@@ -362,8 +362,9 @@ private struct BottomWave: View {
                         // standing up when you get loud.
                         let amp: Double = (size.height - base) * layer.ampScale
                             * (0.22 + 0.78 * drive)
-                        // Two incommensurate sines per layer for an organic edge.
-                        let speed: Double = layer.speed * (1 + loudness * 0.9)
+                        // Speeds up with loudness, but gently — a big swing here
+                        // is what reads as "frantic" rather than "alive".
+                        let speed: Double = layer.speed * (1 + loudness * 0.4)
                         let phaseA: Double = progress * layer.frequency * 2 * .pi + t * speed
                         let phaseB: Double =
                             progress * layer.frequency * 3.7 * .pi - t * speed * 0.6
