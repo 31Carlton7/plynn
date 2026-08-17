@@ -561,6 +561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls {
             switch url.host ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
             case "settings": mainWindow.show(tab: .settings)
+            case "notes", "meetings": mainWindow.show(tab: .notes)
             case "dictionary": mainWindow.show(tab: .dictionary)
             case "snippets": mainWindow.show(tab: .snippets)
             case "setup": onboarding.show()

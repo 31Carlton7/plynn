@@ -4,7 +4,7 @@ import ServiceManagement
 import SwiftUI
 
 enum MainTab: String, Hashable {
-    case home, dictionary, snippets, settings
+    case home, notes, dictionary, snippets, settings
 }
 
 @MainActor @Observable
@@ -24,6 +24,9 @@ struct MainView: View {
                 HomeView(store: store)
                     .tabItem { Label("Home", systemImage: "house") }
                     .tag(MainTab.home)
+                MeetingsView(store: store)
+                    .tabItem { Label("Notes", systemImage: "note.text") }
+                    .tag(MainTab.notes)
                 DictionaryView(store: store)
                     .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
                     .tag(MainTab.dictionary)
