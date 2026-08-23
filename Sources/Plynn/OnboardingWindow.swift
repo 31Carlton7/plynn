@@ -17,6 +17,9 @@ struct OnboardingView: View {
                 .font(.title2.bold())
             Text("Three quick steps, then hold **fn** anywhere and talk.")
                 .foregroundStyle(.secondary)
+            Text("Using a third-party keyboard and fn doesn't do anything? Change the activation key under Settings → Hotkey.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
 
             row(done: mic, title: "Microphone",
                 detail: "Plynn hears you only while a hotkey is held.") {

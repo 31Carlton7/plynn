@@ -1,18 +1,24 @@
 import AppKit
 
-/// CGEventTap watcher emitting raw key events (fn = flagsChanged keycode 63,
-/// .maskSecondaryFn). All session logic — interruption, double-tap, cancel —
-/// lives in the tested `Session` state machine, not here.
+/// CGEventTap watcher emitting raw key events for whichever key `trigger`
+/// names (default fn: flagsChanged keycode 63, .maskSecondaryFn — see
+/// `HotkeyTrigger` for why that default doesn't work on every keyboard). All
+/// session logic — interruption, double-tap, cancel — lives in the tested
+/// `Session` state machine, not here.
 public final class HotkeyMonitor {
     public var onFnDown: (() -> Void)?
     public var onFnUp: (() -> Void)?
-    /// Any non-fn keyDown (keycode passed; 53 = Escape).
+    /// Any other keyDown (keycode passed; 53 = Escape).
     public var onKeyDown: ((Int64) -> Void)?
+    /// Settable at any time — takes effect on the next event, no restart needed.
+    public var trigger: HotkeyTrigger
 
     private var tap: CFMachPort?
     private var fnIsDown = false
 
-    public init() {}
+    public init(trigger: HotkeyTrigger = .fn) {
+        self.trigger = trigger
+    }
 
     public func start() -> Bool {
         let mask: CGEventMask =
@@ -41,7 +47,7 @@ public final class HotkeyMonitor {
             // window the fnUp is simply gone: this monitor still believes fn
             // is held, so it will emit nothing on the next press and the
             // session stays open forever. Resync against the live flags.
-            if fnIsDown && !NSEvent.modifierFlags.contains(.function) {
+            if fnIsDown && !NSEvent.modifierFlags.contains(trigger.nsFlag) {
                 fnIsDown = false
                 onFnUp?()
             }
@@ -50,8 +56,8 @@ public final class HotkeyMonitor {
         // The tap's run-loop source is attached to the MAIN run loop, so this
         // callback already executes on the main thread — invoke closures directly.
         let keycode = event.getIntegerValueField(.keyboardEventKeycode)
-        if type == .flagsChanged && keycode == 63 {
-            let down = event.flags.contains(.maskSecondaryFn)
+        if type == .flagsChanged && trigger.matches(keycode: keycode) {
+            let down = event.flags.contains(trigger.flagMask)
             if down && !fnIsDown {
                 fnIsDown = true
                 onFnDown?()

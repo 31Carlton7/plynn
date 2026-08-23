@@ -4,7 +4,11 @@ import Sparkle
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let hotkey = HotkeyMonitor()
+    let hotkey = HotkeyMonitor(trigger: AppDelegate.storedHotkeyTrigger())
+
+    static func storedHotkeyTrigger() -> HotkeyTrigger {
+        UserDefaults.standard.string(forKey: "hotkeyTrigger").flatMap(HotkeyTrigger.init) ?? .fn
+    }
     let secureWatcher = SecureInputWatcher()
     let engineManager = EngineManager()
     let model = IndicatorModel()
@@ -59,6 +63,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !Permissions.micGranted() || !Permissions.accessibilityGranted() {
             onboarding.show()
+        }
+
+        // Picking a different activation key in Settings takes effect
+        // immediately — no relaunch, since the tap just matches a new keycode.
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let stored = AppDelegate.storedHotkeyTrigger()
+                if self.hotkey.trigger != stored { self.hotkey.trigger = stored }
+            }
         }
 
         // Warm the active engine, then the polish LLM (serialized — don't

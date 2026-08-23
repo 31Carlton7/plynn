@@ -44,6 +44,7 @@ struct MainView: View {
 
 struct SettingsPane: View {
     @Bindable var engineManager: EngineManager
+    @AppStorage("hotkeyTrigger") private var hotkeyTrigger: HotkeyTrigger = .fn
     @AppStorage("aiPolish") private var aiPolish = true
     @AppStorage("learnCorrections") private var learnCorrections = true
     @AppStorage("soundEffects") private var soundEffects = true
@@ -61,6 +62,17 @@ struct SettingsPane: View {
                     Text("Apple (built-in)").tag(EngineChoice.apple)
                 }
                 LabeledContent("Status", value: engineManager.statusLine)
+            }
+            Section {
+                Picker("Activation key", selection: $hotkeyTrigger) {
+                    ForEach(HotkeyTrigger.allCases) { trigger in
+                        Text(trigger.displayName).tag(trigger)
+                    }
+                }
+            } header: {
+                Text("Hotkey")
+            } footer: {
+                Text("fn works on Apple keyboards. Some third-party keyboards (NuPhy, Keychron, and similar compact boards) implement Fn as a local layer key that never reaches macOS as fn. If holding fn does nothing, switch to Right Option, Right Command, or Right Control instead. Takes effect immediately.")
             }
             Section {
                 Toggle("AI polish", isOn: $aiPolish)
