@@ -586,20 +586,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private var currentIconName = ""
+    private var currentMenuBarState: MenuBarState?
 
     func refreshStatusIcon() {
-        let name: String
+        let state: MenuBarState
         switch session.state {
-        case .recording: name = "mic.fill"
-        case .meeting: name = "record.circle"
-        case .transcribing: name = "waveform"
-        default: name = "mic"
+        case .recording: state = .recording
+        case .meeting: state = .meeting
+        case .transcribing: state = .transcribing
+        default: state = .idle
         }
-        guard name != currentIconName else { return }  // called on every keystroke
-        currentIconName = name
-        statusItem.button?.image = NSImage(
-            systemSymbolName: name, accessibilityDescription: "Plynn")
+        guard state != currentMenuBarState else { return }  // called on every keystroke
+        currentMenuBarState = state
+        let image = MenuBarIcon.image(for: state)
+        image.accessibilityDescription = "Plynn"
+        statusItem.button?.image = image
     }
 }
 
