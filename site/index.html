@@ -58,8 +58,14 @@
 
   .label { padding-top: 110px; font-size: 16px; font-weight: 400; color: rgba(0, 0, 0, 0.58); }
 
-  .media { padding-top: 28px; }
-  .media img { max-width: 780px; width: 100%; height: auto; display: block; }
+  .media-full {
+    position: relative;
+    left: 50%; right: 50%;
+    margin-left: -50vw; margin-right: -50vw;
+    width: 100vw;
+    padding-top: 28px;
+  }
+  .media-full img { width: 100%; height: auto; display: block; }
 
   .statement { padding-top: 120px; }
   .statement h2 {
@@ -114,10 +120,10 @@
 
 <section class="rail">
   <h2 class="label">What Plynn does</h2>
-  <div class="media">
-    <img src="/assets/indicator-demo.gif" alt="Plynn's floating glass capsule showing a live transcript while dictating" loading="lazy">
-  </div>
 </section>
+<div class="media-full">
+  <img src="/assets/indicator-demo.gif" alt="Plynn's floating glass capsule showing a live transcript while dictating" loading="lazy">
+</div>
 
 <section class="statement rail">
   <h2>Say it once, get it clean. <span class="rest">Fillers are cut, self corrections are applied, spoken lists become real lists, and the tone matches the app you are writing in. All of it on device.</span></h2>
