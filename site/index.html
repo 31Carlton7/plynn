@@ -7,7 +7,16 @@
 <meta name="description" content="Hold a key, talk, and clean text lands wherever your cursor is. Transcription and AI polish run entirely on your Mac. Free and open source.">
 <meta property="og:title" content="Plynn for Mac">
 <meta property="og:description" content="Dictation that never touches the internet. Free and open source.">
-<meta property="og:image" content="https://plynn.vercel.app/assets/indicator-still.png">
+<meta property="og:url" content="https://plynn.app">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://plynn.app/assets/og.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@31carlton7">
+<meta name="twitter:title" content="Plynn for Mac">
+<meta name="twitter:description" content="Dictation that never touches the internet. Free and open source.">
+<meta name="twitter:image" content="https://plynn.app/assets/og.png">
 <link rel="icon" type="image/png" href="/assets/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -58,14 +67,8 @@
 
   .label { padding-top: 110px; font-size: 16px; font-weight: 400; color: rgba(0, 0, 0, 0.58); }
 
-  .media-full {
-    position: relative;
-    left: 50%; right: 50%;
-    margin-left: -50vw; margin-right: -50vw;
-    width: 100vw;
-    padding-top: 28px;
-  }
-  .media-full img { width: 100%; height: auto; display: block; }
+  .media-band { padding-top: 32px; max-width: 1160px; }
+  .media-band img, .media-band video { width: 100%; height: auto; display: block; border-radius: 18px; }
 
   .statement { padding-top: 120px; }
   .statement h2 {
@@ -86,6 +89,24 @@
   .grid h3 { font-size: 20px; font-weight: 500; line-height: 1.35; letter-spacing: -0.01em; }
   .grid h3 b { font-weight: 500; color: rgba(0, 0, 0, 0.8); }
   .grid h3 span { color: rgba(0, 0, 0, 0.38); }
+
+  .carousel { padding-top: 56px; max-width: 1160px; position: relative; }
+  .carousel .track {
+    display: flex; gap: 20px;
+    overflow-x: auto; scroll-snap-type: x mandatory;
+    scrollbar-width: none; border-radius: 18px;
+  }
+  .carousel .track::-webkit-scrollbar { display: none; }
+  .carousel figure { flex: 0 0 88%; scroll-snap-align: start; margin: 0; }
+  .carousel img { width: 100%; height: auto; display: block; border-radius: 18px; }
+  .carousel figcaption { margin-top: 14px; font-size: 15px; color: rgba(0, 0, 0, 0.45); }
+  .carousel .arrows { display: flex; gap: 8px; margin-top: 20px; }
+  .carousel .arrows button {
+    width: 38px; height: 38px; border: 0; border-radius: 999px;
+    background: rgba(0, 0, 0, 0.055); color: rgba(0, 0, 0, 0.9);
+    font-size: 16px; cursor: pointer; transition: background 0.15s ease;
+  }
+  .carousel .arrows button:hover { background: rgba(0, 0, 0, 0.1); }
 
   footer { padding-top: 140px; padding-bottom: 72px; }
   footer .fine { margin-top: 44px; font-size: 15px; color: rgba(0, 0, 0, 0.4); }
@@ -121,8 +142,8 @@
 <section class="rail">
   <h2 class="label">What Plynn does</h2>
 </section>
-<div class="media-full">
-  <img src="/assets/indicator-demo.gif" alt="Plynn's floating glass capsule showing a live transcript while dictating" loading="lazy">
+<div class="media-band rail">
+  <video src="/assets/dictation.mp4" autoplay muted loop playsinline aria-label="Dictating into Notes: words stream into Plynn's capsule, get polished, and land in the document"></video>
 </div>
 
 <section class="statement rail">
@@ -143,6 +164,34 @@
 <section class="statement rail">
   <h2>A real native Mac app. <span class="rest">Swift, SwiftUI, and a menu bar item that behaves. Your dictations live in a local file you can open yourself, and they are sent nowhere.</span></h2>
 </section>
+
+<div class="carousel rail">
+  <div class="track" id="track">
+    <figure>
+      <img src="/assets/meeting.png" alt="A meeting being recorded while on-device notes with action items appear in a window">
+      <figcaption>Meeting notes: record a call, get a written summary. All on device.</figcaption>
+    </figure>
+    <figure>
+      <img src="/assets/command.png" alt="Selected text in Mail with Plynn's capsule showing the spoken instruction make this shorter">
+      <figcaption>Command mode: select text, say what to do with it.</figcaption>
+    </figure>
+    <figure>
+      <img src="/assets/home.png" alt="Plynn's main window with dictation stats and history">
+      <figcaption>Your stats and every dictation, in a window that stays on your Mac.</figcaption>
+    </figure>
+  </div>
+  <div class="arrows">
+    <button aria-label="Previous" onclick="slide(-1)">←</button>
+    <button aria-label="Next" onclick="slide(1)">→</button>
+  </div>
+</div>
+<script>
+  document.querySelectorAll('video').forEach(v => v.play().catch(() => {}));
+  function slide(dir) {
+    const t = document.getElementById('track');
+    t.scrollBy({ left: dir * t.clientWidth * 0.88, behavior: 'smooth' });
+  }
+</script>
 
 <section class="rail">
   <div class="grid">
