@@ -18,7 +18,7 @@ I built this because I loved what Wispr Flow could do but didn't love sending my
 
 ## Install
 
-Grab `Plynn.dmg` from [Releases](../../releases), drag Plynn to Applications, and launch. The app is notarized, so there's nothing to bypass. Onboarding asks for microphone and accessibility permissions, and the speech models (about 1 GB) download in the background while Apple's built-in engine covers your first dictations.
+Grab it at [plynn.vercel.app](https://plynn.vercel.app), or grab `Plynn.dmg` from [Releases](../../releases), drag Plynn to Applications, and launch. The app is notarized, so there's nothing to bypass. Onboarding asks for microphone and accessibility permissions, and the speech models (about 1 GB) download in the background while Apple's built-in engine covers your first dictations.
 
 Requires macOS 26 (Tahoe) on Apple Silicon. Enable Apple Intelligence in System Settings to get the best polish engine.
 

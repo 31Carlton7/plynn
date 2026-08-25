@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plynn for Mac — Dictation that never touches the internet</title>
+<meta name="description" content="Hold a key, talk, and clean text lands wherever your cursor is. Transcription and AI polish run entirely on your Mac. Free and open source.">
+<meta property="og:title" content="Plynn for Mac">
+<meta property="og:description" content="Dictation that never touches the internet. Free and open source.">
+<meta property="og:image" content="https://plynn.vercel.app/assets/indicator-still.png">
+<link rel="icon" type="image/png" href="/assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Geist", -apple-system, "system-ui", "Helvetica Neue", Arial, sans-serif;
+    background: #fff;
+    color: rgba(0, 0, 0, 0.58);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .rail { padding-left: 5.5%; padding-right: 5.5%; }
+
+  header { padding-top: 28px; display: flex; align-items: center; gap: 10px; }
+  header img { width: 26px; height: 26px; border-radius: 7px; }
+  header span { font-size: 16px; color: rgba(0, 0, 0, 0.58); }
+
+  .hero { padding-top: 118px; padding-bottom: 60px; }
+  h1 {
+    font-size: 54px;
+    font-weight: 500;
+    line-height: 1.05;
+    letter-spacing: -0.035em;
+    max-width: 13.5em;
+    color: rgba(0, 0, 0, 0.9);
+  }
+  h1 .rest { color: #b2b2b2; }
+
+  .buttons { display: flex; gap: 8px; margin-top: 44px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 38px; padding: 0 18px;
+    background: rgba(0, 0, 0, 0.055);
+    color: rgba(0, 0, 0, 0.9);
+    font-size: 15px; font-weight: 500;
+    text-decoration: none;
+    border-radius: 999px;
+    transition: background 0.15s ease;
+  }
+  .btn:hover { background: rgba(0, 0, 0, 0.1); }
+  .btn.primary { background: #1f1f1f; color: #fff; }
+  .btn.primary:hover { background: #000; }
+  .btn svg { width: 13px; height: 13px; }
+
+  .label { padding-top: 110px; font-size: 16px; font-weight: 400; color: rgba(0, 0, 0, 0.58); }
+
+  .media { padding-top: 28px; }
+  .media img { max-width: 780px; width: 100%; height: auto; display: block; }
+
+  .statement { padding-top: 120px; }
+  .statement h2 {
+    font-size: 32px; font-weight: 500;
+    line-height: 1.25; letter-spacing: -0.02em;
+    max-width: 22em;
+    color: rgba(0, 0, 0, 0.72);
+  }
+  .statement h2 .rest { color: rgba(0, 0, 0, 0.31); }
+
+  .grid {
+    padding-top: 64px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 56px 48px;
+    max-width: 1160px;
+  }
+  .grid h3 { font-size: 20px; font-weight: 500; line-height: 1.35; letter-spacing: -0.01em; }
+  .grid h3 b { font-weight: 500; color: rgba(0, 0, 0, 0.8); }
+  .grid h3 span { color: rgba(0, 0, 0, 0.38); }
+
+  footer { padding-top: 140px; padding-bottom: 72px; }
+  footer .fine { margin-top: 44px; font-size: 15px; color: rgba(0, 0, 0, 0.4); }
+  footer .fine a { color: rgba(0, 0, 0, 0.62); text-decoration: none; }
+  footer .fine a:hover { color: rgba(0, 0, 0, 0.9); }
+
+  @media (max-width: 720px) {
+    h1 { font-size: 36px; letter-spacing: -0.025em; }
+    .statement h2 { font-size: 25px; }
+    .grid { grid-template-columns: 1fr; gap: 36px; }
+    .hero { padding-top: 72px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="rail">
+  <img src="/assets/icon.png" alt="">
+  <span>Plynn</span>
+</header>
+
+<section class="hero rail">
+  <h1>Dictation that never touches the internet. <span class="rest">Hold a key, talk, and clean text lands wherever your cursor is. Every word is heard, transcribed, and polished on your own Mac.</span></h1>
+  <div class="buttons">
+    <a class="btn primary" href="https://github.com/31Carlton7/plynn/releases/latest/download/Plynn.dmg">
+      Download for Apple silicon
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5"/></svg>
+    </a>
+    <a class="btn" href="https://github.com/31Carlton7/plynn">View on GitHub</a>
+  </div>
+</section>
+
+<section class="rail">
+  <h2 class="label">What Plynn does</h2>
+  <div class="media">
+    <img src="/assets/indicator-demo.gif" alt="Plynn's floating glass capsule showing a live transcript while dictating" loading="lazy">
+  </div>
+</section>
+
+<section class="statement rail">
+  <h2>Say it once, get it clean. <span class="rest">Fillers are cut, self corrections are applied, spoken lists become real lists, and the tone matches the app you are writing in. All of it on device.</span></h2>
+</section>
+
+<section class="rail">
+  <div class="grid">
+    <h3><b>Hold the key. Talk. Release.</b> <span>A live transcript streams into a floating glass capsule while you speak, and the finished text pastes in under a second.</span></h3>
+    <h3><b>Polish without a server.</b> <span>Apple Intelligence cleans your words on your own silicon. No cloud, no account, no audio leaving the machine.</span></h3>
+    <h3><b>Instant when it can be.</b> <span>Clean short dictations skip the model entirely and paste immediately. Polish only runs when there is something to fix.</span></h3>
+    <h3><b>Command mode.</b> <span>Select text anywhere, hold the key, and say what to do with it. "Make this shorter" rewrites the selection in place.</span></h3>
+    <h3><b>A dictionary that learns you.</b> <span>Fix a word right after a paste and Plynn notices, learns the correction, and gets it right from then on.</span></h3>
+    <h3><b>Snippets.</b> <span>Say "my email" and your actual address comes out. Any phrase can expand into any text.</span></h3>
+  </div>
+</section>
+
+<section class="statement rail">
+  <h2>A real native Mac app. <span class="rest">Swift, SwiftUI, and a menu bar item that behaves. Your dictations live in a local file you can open yourself, and they are sent nowhere.</span></h2>
+</section>
+
+<section class="rail">
+  <div class="grid">
+    <h3><b>Meeting notes, on device.</b> <span>Triple-tap to record a call. The transcript and a written summary land as Markdown, produced locally.</span></h3>
+    <h3><b>History that stays home.</b> <span>Every dictation is kept in local SQLite with your stats: words per minute, words written, time spoken.</span></h3>
+    <h3><b>Never types into a password.</b> <span>Secure fields are detected and dictation pauses itself until you are somewhere safe.</span></h3>
+    <h3><b>Your keyboard, your key.</b> <span>fn, Right Option, Right Command, or Right Control. Switching takes effect immediately.</span></h3>
+    <h3><b>Works with what the mic allows.</b> <span>On a FaceTime or Zoom call, Plynn shares the microphone and keeps working through device changes.</span></h3>
+    <h3><b>Free and open source.</b> <span>MIT licensed and built in the open, with automatic updates. Read every line before you trust it.</span></h3>
+  </div>
+</section>
+
+<footer class="rail">
+  <a class="btn primary" href="https://github.com/31Carlton7/plynn/releases/latest/download/Plynn.dmg">
+    Download for Apple silicon
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5"/></svg>
+  </a>
+  <p class="fine">Plynn is made by <a href="https://carltonaikins.com">Carlton Aikins</a> · <a href="https://github.com/31Carlton7/plynn">GitHub</a> · <a href="https://x.com/31carlton7">X</a> · Requires macOS 26 on Apple silicon</p>
+</footer>
+
+</body>
+</html>
