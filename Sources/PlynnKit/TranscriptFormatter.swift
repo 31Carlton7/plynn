@@ -83,7 +83,8 @@ public actor TranscriptFormatter {
         text = DictionaryCorrector.correct(text, terms: terms)
         let profile = context.profile
         if profile.isTechnical {
-            text = ReferenceResolver.tagFileReferences(text, terms: terms)
+            text = ReferenceResolver.tagFileReferences(
+                text, terms: terms, fileCandidates: context.fileCandidates)
         }
         // Latency gate: clean short dictations paste instantly; the LLM only
         // runs when there are fillers/backtracks/lists to fix or it's long.
@@ -101,7 +102,8 @@ public actor TranscriptFormatter {
             // The LLM can regress a spelling it saw in the raw text; re-assert.
             text = DictionaryCorrector.correct(text, terms: terms)
             if profile.isTechnical {
-                text = ReferenceResolver.tagFileReferences(text, terms: terms)
+                text = ReferenceResolver.tagFileReferences(
+                    text, terms: terms, fileCandidates: context.fileCandidates)
             }
         }
         return FormatResult(text: text, pressEnter: rules.pressEnter, verbatim: transcript)

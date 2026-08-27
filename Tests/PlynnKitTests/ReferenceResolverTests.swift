@@ -41,6 +41,13 @@ final class ReferenceResolverTests: XCTestCase {
             "update @README.md")
     }
 
+    func testTagsUniqueWorkspaceCandidateWithoutDictionaryTerm() {
+        XCTAssertEqual(
+            ReferenceResolver.tagFileReferences(
+                "review package dot swift", terms: [], fileCandidates: ["Package.swift"]),
+            "review @Package.swift")
+    }
+
     func testFormatterTagsOnlyTechnicalApps() async {
         let mainTerm = PersonalStore.Term(id: 1, text: "main.swift", aliases: [])
         let formatter = TranscriptFormatter(personalization: {

@@ -1,10 +1,10 @@
 import Foundation
 
-/// Adds deterministic file tags for known personal dictionary terms.
+/// Adds deterministic file tags for known dictionary or workspace terms.
 ///
 /// A term such as `main.swift` also matches the spoken form `main dot swift`.
-/// The resolver never searches the filesystem and never invents a filename:
-/// only an explicitly configured dictionary term can become a tag.
+/// Workspace candidates are filenames only; the resolver never reads file
+/// contents or invents a filename.
 public enum ReferenceResolver {
     private struct Candidate {
         let phrase: String
@@ -12,11 +12,17 @@ public enum ReferenceResolver {
     }
 
     public static func tagFileReferences(
-        _ text: String, terms: [PersonalStore.Term]
+        _ text: String,
+        terms: [PersonalStore.Term],
+        fileCandidates: [String] = []
     ) -> String {
         guard !text.isEmpty else { return text }
 
-        let candidates = terms.flatMap(candidates(for:))
+        var seen = Set<String>()
+        let candidates = (terms.flatMap(candidates(for:)) + fileCandidates.flatMap(candidates(for:)))
+            .filter {
+                seen.insert($0.phrase.lowercased() + "\u{1F}" + $0.canonical.lowercased()).inserted
+            }
             .sorted {
                 if $0.phrase.count != $1.phrase.count {
                     return $0.phrase.count > $1.phrase.count
@@ -42,10 +48,19 @@ public enum ReferenceResolver {
     private static func candidates(for term: PersonalStore.Term) -> [Candidate] {
         guard let canonical = fileName(from: term.text) else { return [] }
 
+        return makeCandidates(canonical: canonical, aliases: term.aliases)
+    }
+
+    private static func candidates(for candidateName: String) -> [Candidate] {
+        guard let canonical = fileName(from: candidateName) else { return [] }
+        return makeCandidates(canonical: canonical, aliases: [])
+    }
+
+    private static func makeCandidates(canonical: String, aliases: [String]) -> [Candidate] {
         var phrases = [canonical, spokenPhrase(for: canonical)]
         // Explicit aliases are useful when ASR consistently renders a name
         // differently, but plain English aliases are too easy to over-tag.
-        phrases += term.aliases.filter {
+        phrases += aliases.filter {
             $0.contains(".") || $0.lowercased().contains(" dot ")
         }
 

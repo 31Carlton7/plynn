@@ -28,8 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     })
     var pendingPressEnter = false
     var lastCaptureSeconds = 0.0
-    /// Non-nil when the session began with text selected → command mode.
-    var pendingSelection: String?
+    /// Captured at fn-down so formatting uses the original target app.
+    var pendingContext: ContextSnapshot?
+    var pendingFileCandidates: Task<[String], Never>?
 
     // Meeting mode
     var meetingRecorder: MeetingRecorder?
@@ -147,7 +148,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.resetLevels()
             panel.show()
 
-            pendingSelection = SelectionReader.selectedText()
+            let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            let context = ContextSnapshot(
+                bundleID: bundleID,
+                selectedText: SelectionReader.selectedText(),
+                workspaceRoot: CodexCLIContextReader.read()?.workspaceRoot)
+            pendingContext = context
+            if context.profile.isTechnical, let workspaceRoot = context.workspaceRoot {
+                pendingFileCandidates = Task.detached(priority: .utility) {
+                    WorkspaceFileIndex.candidates(at: workspaceRoot)
+                }
+            }
 
             let (stream, continuation) = AsyncStream.makeStream(of: [Float].self)
             chunkContinuation = continuation
@@ -210,10 +221,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let feedTask = feedTask
             let engine = sessionEngine
             let formatter = formatter
-            let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             let aiPolish = UserDefaults.standard.object(forKey: "aiPolish") as? Bool ?? true
-            let context = ContextSnapshot(bundleID: bundleID, selectedText: pendingSelection)
-            pendingSelection = nil
+            let context = pendingContext ?? ContextSnapshot(
+                bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+            let fileCandidatesTask = pendingFileCandidates
+            pendingContext = nil
+            pendingFileCandidates = nil
+            let bundleID = context.bundleID
             Task {
                 await feedTask?.value  // all chunks fed, in order
                 let raw = (try? await engine?.finish()) ?? ""
@@ -241,7 +255,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                let result = await formatter.format(raw, context: context, aiPolish: aiPolish)
+                let fileCandidates = await fileCandidatesTask?.value ?? []
+                let result = await formatter.format(
+                    raw,
+                    context: context.withFileCandidates(fileCandidates),
+                    aiPolish: aiPolish)
                 await MainActor.run {
                     self.pendingPressEnter = result.pressEnter
                     if result.text != result.verbatim {
@@ -259,7 +277,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case .discardRecording:
-            pendingSelection = nil
+            pendingContext = nil
+            pendingFileCandidates?.cancel()
+            pendingFileCandidates = nil
             let discarded = recorder?.stop() ?? []
             // Stay silent for the sub-minHold taps that also discard — including
             // the first half of a hands-free double-tap, where a cancel cue
