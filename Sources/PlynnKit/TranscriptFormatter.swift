@@ -74,17 +74,20 @@ public actor TranscriptFormatter {
     }
 
     public func format(
-        _ transcript: String, bundleID: String?, aiPolish: Bool
+        _ transcript: String, context: ContextSnapshot, aiPolish: Bool
     ) async -> FormatResult {
         let (snippets, terms) = personalization()
         let rules = RulesFormatter.format(transcript)
         var text = rules.text
         text = SnippetExpander.expand(text, snippets: snippets)
         text = DictionaryCorrector.correct(text, terms: terms)
+        let profile = context.profile
+        if profile.isTechnical {
+            text = ReferenceResolver.tagFileReferences(text, terms: terms)
+        }
         // Latency gate: clean short dictations paste instantly; the LLM only
         // runs when there are fillers/backtracks/lists to fix or it's long.
         if aiPolish, !text.isEmpty, PolishGate.needsPolish(text) {
-            let profile = AppCategories.profile(forBundleID: bundleID)
             let spellings = DictionaryCorrector.relevantTerms(for: text, terms: terms)
             if appleFM.ready {
                 text = await appleFM.format(
@@ -97,7 +100,20 @@ public actor TranscriptFormatter {
             }
             // The LLM can regress a spelling it saw in the raw text; re-assert.
             text = DictionaryCorrector.correct(text, terms: terms)
+            if profile.isTechnical {
+                text = ReferenceResolver.tagFileReferences(text, terms: terms)
+            }
         }
         return FormatResult(text: text, pressEnter: rules.pressEnter, verbatim: transcript)
+    }
+
+    /// Backward-compatible convenience for callers that only know the app ID.
+    public func format(
+        _ transcript: String, bundleID: String?, aiPolish: Bool
+    ) async -> FormatResult {
+        await format(
+            transcript,
+            context: ContextSnapshot(bundleID: bundleID),
+            aiPolish: aiPolish)
     }
 }

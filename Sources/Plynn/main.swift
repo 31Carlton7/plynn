@@ -212,14 +212,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let formatter = formatter
             let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             let aiPolish = UserDefaults.standard.object(forKey: "aiPolish") as? Bool ?? true
-            let selection = pendingSelection
+            let context = ContextSnapshot(bundleID: bundleID, selectedText: pendingSelection)
             pendingSelection = nil
             Task {
                 await feedTask?.value  // all chunks fed, in order
                 let raw = (try? await engine?.finish()) ?? ""
 
                 // Command mode: selection + spoken instruction → replace it.
-                if let selection, !raw.trimmingCharacters(in: .whitespaces).isEmpty {
+                if let selection = context.selectedText,
+                    !raw.trimmingCharacters(in: .whitespaces).isEmpty {
                     let transformed = await formatter.transform(
                         selection: selection, instruction: raw)
                     await MainActor.run {
@@ -240,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                let result = await formatter.format(raw, bundleID: bundleID, aiPolish: aiPolish)
+                let result = await formatter.format(raw, context: context, aiPolish: aiPolish)
                 await MainActor.run {
                     self.pendingPressEnter = result.pressEnter
                     if result.text != result.verbatim {
