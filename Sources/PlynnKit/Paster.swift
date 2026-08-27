@@ -66,7 +66,10 @@ public enum Paster {
     private static func copyToClipboard(_ text: String) -> Bool {
         let pb = NSPasteboard.general
         guard pb.clearContents() != 0 else { return false }
-        return pb.setString(text, forType: .string)
+        guard pb.setString(text, forType: .string) else { return false }
+        // Ask clipboard managers not to retain the fallback transcript.
+        pb.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        return true
     }
 
     /// Synthesize a Return keypress (the "press enter" command) — call only

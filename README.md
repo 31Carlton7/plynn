@@ -44,7 +44,7 @@ be safely targeted, so you can press `⌘V` manually.
 
 Speech recognition is Parakeet Unified running on the Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio), streaming partials as you speak. A deterministic rules pass handles spoken punctuation instantly, then a small on-device language model does the heavier cleanup, but only when the transcript actually needs it. Clean short dictations skip the model entirely and paste immediately. A latency gate, basically.
 
-Your dictionary, snippets, and history live in one SQLite file at `~/Library/Application Support/Plynn/`. Nothing is sent anywhere, ever. There's no account, no telemetry, and no server to go down.
+Your dictionary, snippets, and history live in one SQLite file at `~/Library/Application Support/Plynn/`. Dictation text stays on the Mac; first use downloads the local speech and polish models. There's no account, no telemetry, and no transcript upload.
 
 See [ROADMAP.md](docs/ROADMAP.md) for what's next, including swappable polish models.
 
