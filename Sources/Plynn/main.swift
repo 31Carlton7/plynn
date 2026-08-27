@@ -57,11 +57,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let transcribeDeadline: Duration = .seconds(25)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchStartedAt = ContinuousClock.now
         NSLog("plynn: starting; RSS %.0f MB; AX trusted: %d",
               Metrics.residentMB(), AXIsProcessTrusted() ? 1 : 0)
         setUpStatusItem()
 
-        if !Permissions.micGranted() || !Permissions.accessibilityGranted() {
+        if !Permissions.micGranted()
+            || !Permissions.accessibilityGranted()
+            || !engineManager.activeEngineReady {
             onboarding.show()
         }
 
@@ -80,8 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Warm the active engine, then the polish LLM (serialized — don't
         // compete for download bandwidth or memory pressure at launch).
         Task { [engineManager, formatter] in
-            try? await engineManager.engineForNewSession().start()
-            NSLog("plynn: engine warm; RSS %.0f MB", Metrics.residentMB())
+            if await engineManager.warmActiveEngine() {
+                NSLog("plynn: [launch-to-ready %@] RSS %.0f MB",
+                      "\(launchStartedAt.duration(to: .now))", Metrics.residentMB())
+            }
             await formatter.warmLLM()
             NSLog("plynn: polish engine %@; RSS %.0f MB",
                   await formatter.polishEngine ?? "none (rules only)", Metrics.residentMB())
@@ -117,6 +122,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func dispatch(_ event: Session.Event) {
+        if case .fnDown = event,
+            session.state == .idle,
+            !engineManager.activeEngineReady {
+            onboarding.show()
+            Task { [engineManager] in _ = await engineManager.warmActiveEngine() }
+            return
+        }
         let effects = session.handle(event, at: .now)
         for effect in effects {
             perform(effect)
@@ -129,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // paste). The .done check state hides itself on a timer instead.
         if session.state == .idle, recorder == nil,
             model.phase != .secure, model.phase != .done, model.phase != .micUnavailable,
+            !isErrorPhase,
             model.phase != .meetingSaved {
             panel.hide()
         }
@@ -153,13 +166,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             chunkContinuation = continuation
             let engine = engineManager.engineForNewSession()
             sessionEngine = engine
-            feedTask = Task {
-                try? await engine.start()
+            feedTask = Task { [weak self] in
+                do {
+                    try await engine.start()
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { [weak self] in
+                        self?.dispatch(.transcriptionFailed("Model loading failed"))
+                    }
+                    return
+                }
                 await engine.setPartialCallback { [weak self] text in
                     Task { @MainActor in self?.model.partial = text }
                 }
-                for await chunk in stream {  // AsyncStream preserves chunk order
-                    try? await engine.append(samples: chunk)
+                do {
+                    for await chunk in stream {  // AsyncStream preserves chunk order
+                        try await engine.append(samples: chunk)
+                    }
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { [weak self] in
+                        self?.dispatch(.transcriptionFailed("Transcription failed"))
+                    }
                 }
             }
 
@@ -185,14 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try r.start()
                 } catch {
                     NSLog("plynn: mic unavailable \(error)")
-                    Feedback.play(.failure)
-                    model.phase = .micUnavailable
-                    recorder = nil
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
-                        guard let self, self.model.phase == .micUnavailable else { return }
-                        self.panel.hide()
-                    }
-                    dispatch(.escape)  // tear the session back down
+                    dispatch(.transcriptionFailed("Microphone unavailable"))
                 }
             }
 
@@ -210,18 +231,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let feedTask = feedTask
             let engine = sessionEngine
             let formatter = formatter
+            let transcriptionReleaseAt = releasedAt
             let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             let aiPolish = UserDefaults.standard.object(forKey: "aiPolish") as? Bool ?? true
             let selection = pendingSelection
             pendingSelection = nil
             Task {
                 await feedTask?.value  // all chunks fed, in order
-                let raw = (try? await engine?.finish()) ?? ""
+                if let transcriptionReleaseAt {
+                    NSLog("plynn: [fn-release-to-feed %@]",
+                          "\(transcriptionReleaseAt.duration(to: .now))")
+                }
+                let stillTranscribing = await MainActor.run {
+                    self.session.state == .transcribing
+                }
+                guard stillTranscribing else { return }
+                guard let engine else {
+                    await MainActor.run {
+                        self.dispatch(.transcriptionFailed("Transcription failed"))
+                    }
+                    return
+                }
+                let raw: String
+                do {
+                    raw = try await engine.finish()
+                } catch {
+                    await MainActor.run {
+                        self.dispatch(.transcriptionFailed("Transcription failed"))
+                    }
+                    return
+                }
+                if let transcriptionReleaseAt {
+                    NSLog("plynn: [fn-release-to-engine-finish %@] engine %@",
+                          "\(transcriptionReleaseAt.duration(to: .now))", engine.displayName)
+                }
 
                 // Command mode: selection + spoken instruction → replace it.
                 if let selection, !raw.trimmingCharacters(in: .whitespaces).isEmpty {
                     let transformed = await formatter.transform(
                         selection: selection, instruction: raw)
+                    if let transcriptionReleaseAt {
+                        NSLog("plynn: [fn-release-to-format %@] mode command",
+                              "\(transcriptionReleaseAt.duration(to: .now))")
+                    }
+                    let canDeliver = await MainActor.run {
+                        self.session.state == .transcribing
+                    }
+                    guard canDeliver else { return }
                     await MainActor.run {
                         self.pendingPressEnter = false
                         if let transformed {
@@ -241,17 +297,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 let result = await formatter.format(raw, bundleID: bundleID, aiPolish: aiPolish)
+                if let transcriptionReleaseAt {
+                    NSLog("plynn: [fn-release-to-format %@] ai-polish %d",
+                          "\(transcriptionReleaseAt.duration(to: .now))", aiPolish ? 1 : 0)
+                }
+                let canDeliver = await MainActor.run {
+                    self.session.state == .transcribing
+                }
+                guard canDeliver else { return }
                 await MainActor.run {
                     self.pendingPressEnter = result.pressEnter
                     if result.text != result.verbatim {
-                        NSLog("plynn: verbatim — %@", result.verbatim)
+                        NSLog("plynn: formatting changed transcript")
                     }
                     if !result.text.isEmpty {
                         try? self.store?.record(
                             app: bundleID ?? "unknown",
                             verbatim: result.verbatim, formatted: result.text,
                             durationSeconds: self.lastCaptureSeconds,
-                            engine: engine?.displayName ?? "unknown")
+                            engine: engine.displayName)
                     }
                     self.dispatch(.transcriptReady(result.text))
                 }
@@ -274,6 +338,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .cancelTranscription:
             panel.hide()
 
+        case .showError(let message):
+            showError(message)
+
         case .startMeeting:
             startMeeting()
 
@@ -281,15 +348,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stopMeeting()
 
         case .paste(let text):
-            if let releasedAt {
-                NSLog("plynn: [%@ latency] RSS %.0f MB — %@",
-                      "\(releasedAt.duration(to: .now))", Metrics.residentMB(), text)
+            let releaseTime = releasedAt
+            let pasteResult = Paster.paste(
+                text,
+                onComplete: { [releaseTime] in
+                    guard let releaseTime else { return }
+                    NSLog("plynn: [fn-release-to-paste %@] RSS %.0f MB",
+                          "\(releaseTime.duration(to: .now))", Metrics.residentMB())
+                },
+                onFailure: { [weak self, releaseTime] result in
+                    self?.handlePasteFailure(text, result: result, releaseTime: releaseTime)
+                })
+            guard pasteResult == .scheduled else {
+                handlePasteFailure(text, result: pasteResult, releaseTime: releaseTime)
+                return
             }
-            Paster.paste(text)
             if pendingPressEnter {
                 pendingPressEnter = false
                 // After the paste chord (0.1 s delay + keystrokes) has landed.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { Paster.pressReturn() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+                    guard self?.model.phase == .done else { return }
+                    Paster.pressReturn()
+                }
             }
             Feedback.play(.success)
             model.phase = .done
@@ -300,6 +380,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             scheduleCorrectionCheck(pasted: text)
         }
+    }
+
+    private var isErrorPhase: Bool {
+        if case .error = model.phase { return true }
+        return false
+    }
+
+    func showError(_ message: String) {
+        model.phase = .error(message)
+        panel.show()
+        Feedback.play(.failure)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [weak self] in
+            guard let self, self.model.phase == .error(message) else { return }
+            self.panel.hide()
+        }
+    }
+
+    private func handlePasteFailure(
+        _ text: String, result: PasteResult, releaseTime: ContinuousClock.Instant?
+    ) {
+        pendingPressEnter = false
+        model.partial = text
+        if let releaseTime {
+            NSLog("plynn: [fn-release-to-copy %@] RSS %.0f MB",
+                  "\(releaseTime.duration(to: .now))", Metrics.residentMB())
+        }
+        showError(result == .copiedToClipboard ? "Copied — press ⌘V" : "Paste failed")
     }
 
     // MARK: Meeting mode
@@ -478,7 +585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try? store.addTerm(
                         text: fix.corrected, aliases: [fix.heard.lowercased()])
                 }
-                NSLog("plynn: learned \"%@\" → \"%@\"", fix.heard, fix.corrected)
+                NSLog("plynn: learned dictionary correction")
             }
         }
     }
@@ -535,10 +642,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else { return }
             NSLog("plynn: transcription stalled past %@ — resetting session",
                   "\(Self.transcribeDeadline)")
-            Feedback.play(.failure)
             dispatch(.escape)  // .transcribing → .cancelled
-            dispatch(.transcriptReady(""))  // .cancelled → .idle
-            panel.hide()
+            dispatch(.transcriptionFailed("Transcription timed out"))  // .cancelled → .idle
         }
     }
 

@@ -18,11 +18,13 @@ public struct Session: Sendable {
         /// or the "Stop meeting" menu item).
         case stopRequested
         case transcriptReady(String)
+        case transcriptionFailed(String)
         case secureInputChanged(Bool)
     }
     public enum Effect: Equatable, Sendable {
         case startRecording, stopAndTranscribe, discardRecording
         case cancelTranscription, paste(String)
+        case showError(String)
         case startMeeting, stopMeeting
     }
 
@@ -153,6 +155,15 @@ public struct Session: Sendable {
             state = .idle
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? [] : [.paste(trimmed)]
+
+        case (.recording, .transcriptionFailed(let message)),
+             (.transcribing, .transcriptionFailed(let message)):
+            state = .idle
+            return [.discardRecording, .showError(message)]
+
+        case (.cancelled, .transcriptionFailed(let message)):
+            state = .idle
+            return [.showError(message)]
 
         case (.cancelled, .transcriptReady):
             state = .idle

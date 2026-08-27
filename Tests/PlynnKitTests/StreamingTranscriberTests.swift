@@ -2,6 +2,10 @@ import XCTest
 @testable import PlynnKit
 
 final class StreamingTranscriberTests: XCTestCase {
+    override func setUpWithError() throws {
+        try TestConfiguration.requireModelIntegration()
+    }
+
     func testStreamedFixtureProducesPartialsAndFinal() async throws {
         let st = StreamingTranscriber()
         try await st.start()

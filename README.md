@@ -30,11 +30,19 @@ cd plynn
 ./scripts/make-app.sh
 ```
 
-You'll need Xcode 26 with the Metal toolchain component (`xcodebuild -downloadComponent MetalToolchain`). The build uses `xcodebuild` rather than plain `swift build` because the MLX Metal shaders require it. `swift test` runs the 80+ unit tests.
+You'll need Xcode 26 with the Metal toolchain component (`xcodebuild -downloadComponent MetalToolchain`). The build uses `xcodebuild` rather than plain `swift build` because the MLX Metal shaders require it. `swift test` runs the unit tests.
+
+### Startup recovery
+
+Plynn prepares the local speech engine in the setup window. The first run can
+take longer while speech models download; later launches warm the cached model.
+If cached model startup times out, the setup window tells you to relaunch
+Plynn. A transcript is copied to the clipboard when the focused field cannot
+be safely targeted, so you can press `⌘V` manually.
 
 ## How it's put together
 
-Speech recognition is Parakeet TDT running on the Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio), streaming partials as you speak. A deterministic rules pass handles spoken punctuation instantly, then a small on-device language model does the heavier cleanup, but only when the transcript actually needs it. Clean short dictations skip the model entirely and paste immediately. A latency gate, basically.
+Speech recognition is Parakeet Unified running on the Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio), streaming partials as you speak. A deterministic rules pass handles spoken punctuation instantly, then a small on-device language model does the heavier cleanup, but only when the transcript actually needs it. Clean short dictations skip the model entirely and paste immediately. A latency gate, basically.
 
 Your dictionary, snippets, and history live in one SQLite file at `~/Library/Application Support/Plynn/`. Nothing is sent anywhere, ever. There's no account, no telemetry, and no server to go down.
 

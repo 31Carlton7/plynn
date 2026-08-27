@@ -12,12 +12,18 @@ public final class IndicatorModel {
         case secure
         /// The mic couldn't be opened (another app holds a reconfiguring device).
         case micUnavailable
+        /// A dictation engine or paste operation failed; the message remains
+        /// visible briefly so the user knows why no text appeared.
+        case error(String)
         /// A meeting is being recorded; `elapsed` is whole seconds so far.
         case meeting(elapsed: Int)
         /// Meeting ended, transcript saved, notes being written in the background.
         case meetingSaved
     }
     public var phase: Phase = .recording(handsFree: false)
+    /// True only while the panel is on screen. The waveform uses this to
+    /// avoid running a TimelineView behind a hidden panel.
+    public fileprivate(set) var isVisible = false
     /// Number of envelope points held across the width of the waveform.
     public static let levelHistory = 56
     /// Recent loudness, oldest first. The wave is drawn from this, so what you
@@ -81,11 +87,13 @@ public final class IndicatorPanel: NSPanel {
     public override var canBecomeMain: Bool { false }
 
     public func show() {
+        model.isVisible = true
         positionBottomCenter()
         orderFrontRegardless()
     }
 
     public func hide() {
+        model.isVisible = false
         orderOut(nil)
     }
 

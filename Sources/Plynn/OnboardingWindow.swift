@@ -40,10 +40,22 @@ struct OnboardingView: View {
             Divider()
 
             HStack {
-                Image(systemName: "waveform")
+                Image(systemName: engineManager.activeEngineReady
+                    ? "checkmark.circle.fill" : "waveform")
+                    .foregroundStyle(engineManager.activeEngineReady ? .green : .secondary)
                 Text(engineManager.statusLine)
                     .foregroundStyle(.secondary)
                 Spacer()
+                if engineManager.preparationTimedOut {
+                    Button("Relaunch Plynn") { Permissions.relaunch() }
+                } else if engineManager.preparationFailed {
+                    Button("Retry") {
+                        Task { _ = await engineManager.warmActiveEngine() }
+                    }
+                } else if !engineManager.activeEngineReady {
+                    ProgressView()
+                        .controlSize(.small)
+                }
                 if grantedAxThisRun {
                     Button("Relaunch Plynn") { Permissions.relaunch() }
                         .buttonStyle(.borderedProminent)
@@ -52,10 +64,14 @@ struct OnboardingView: View {
             }
             .font(.callout)
 
-            if mic && ax {
+            if mic && ax && engineManager.activeEngineReady {
                 Text("Ready — focus any text field, hold **fn**, and speak.")
                     .font(.callout)
                     .foregroundStyle(.green)
+            } else if mic && ax {
+                Text("Permissions ready — preparing the speech engine…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(24)

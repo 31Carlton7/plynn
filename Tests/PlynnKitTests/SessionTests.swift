@@ -72,6 +72,17 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(s.state, .idle)
     }
 
+    func testTranscriptionFailureReturnsToIdleWithError() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.fnDown, at: start)
+        _ = s.handle(.fnUp, at: start.advanced(by: .seconds(2)))
+        XCTAssertEqual(
+            s.handle(.transcriptionFailed("Transcription failed"), at: start),
+            [.discardRecording, .showError("Transcription failed")])
+        XCTAssertEqual(s.state, .idle)
+    }
+
     func testSecureInputBlocksSessionStart() {
         var s = Session()
         let start = t0

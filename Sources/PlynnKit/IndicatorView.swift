@@ -35,14 +35,15 @@ struct IndicatorView: View {
     var body: some View {
         GlassEffectContainer {
             ZStack {
-                // Bottom-blended visualizer — always present (inert when
-                // hidden) so phase changes never reset its motion.
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    BottomWave(levels: model.levels, idle: model.phase == .transcribing)
-                        .frame(height: IndicatorMetrics.waveHeight)
+                // TimelineView is removed while the panel is hidden or
+                // polishing. Opacity alone would leave its Canvas ticking.
+                if showsWave {
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        BottomWave(levels: model.levels)
+                            .frame(height: IndicatorMetrics.waveHeight)
+                    }
                 }
-                .opacity(waveOpacity)
 
                 centerContent
             }
@@ -83,12 +84,12 @@ struct IndicatorView: View {
         .padding(IndicatorMetrics.panelPadding)
     }
 
-    private var waveOpacity: Double {
+    private var showsWave: Bool {
+        guard model.isVisible else { return false }
         switch model.phase {
-        case .recording, .meeting: return 1
-        // Off while polishing — the near-still wave reads as a smudge under
-        // the glass rather than motion.
-        case .transcribing, .done, .secure, .micUnavailable, .meetingSaved: return 0
+        case .recording, .meeting: return true
+        case .transcribing, .done, .secure, .micUnavailable, .error, .meetingSaved:
+            return false
         }
     }
 
@@ -126,13 +127,30 @@ struct IndicatorView: View {
             HStack(spacing: 6) {
                 Image(systemName: "mic.slash.fill")
                     .foregroundStyle(.white.opacity(0.9))
-                Text("Microphone in use by another app")
+                Text("Microphone unavailable")
                     .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
             .padding(.horizontal, IndicatorMetrics.inset)
+        case .error(let message):
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 5) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow.opacity(0.95))
+                    Text(message)
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                if !model.partial.isEmpty {
+                    ScrollingPartial(text: model.partial, placeholder: "")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 8)
         case .meeting(let elapsed):
             HStack(spacing: 8) {
                 Circle()
@@ -267,7 +285,6 @@ private struct ScrollingPartial: View {
 private struct BottomWave: View {
     /// Recent loudness, oldest first.
     let levels: [Float]
-    let idle: Bool
 
     private struct Layer {
         let frequency: Double
@@ -315,7 +332,7 @@ private struct BottomWave: View {
                         let progress = Double(i) / Double(steps)
                         let x = size.width * progress
                         // Never fully flat, so the surface still lives in silence.
-                        let drive: Double = idle ? 0.14 : max(0.10, envelope(at: progress))
+                        let drive: Double = max(0.10, envelope(at: progress))
                         // Higher floor than the original 0.10: the hills keep
                         // real body at conversational volume instead of only
                         // standing up when you get loud.

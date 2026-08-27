@@ -6,21 +6,21 @@ import FluidAudio
 /// text. Reusable across sessions: call start() before each dictation.
 public actor StreamingTranscriber: DictationEngine {
     public nonisolated let displayName = "Parakeet (local)"
-    private let variant: StreamingModelVariant
+    /// Keep one model graph warm for predictable memory and startup behavior.
+    /// Change this only after a measured replacement is accepted.
+    private static let variant = StreamingModelVariant.parakeetUnified1120ms
     private var manager: (any StreamingAsrManager)?
     private var vad: VadManager?
     private var sessionSamples: [Float] = []
 
     /// parakeetUnified1120ms shares its model repo with the offline batch path —
     /// one download covers both — and beats the 2080ms tier on WER and latency.
-    public init(variant: StreamingModelVariant = .parakeetUnified1120ms) {
-        self.variant = variant
-    }
+    public init() {}
 
     /// Load models (idempotent) and reset for a new session.
     public func start() async throws {
         if manager == nil {
-            manager = variant.createManager()
+            manager = Self.variant.createManager()
             try await manager!.loadModels()
         }
         try await manager!.reset()
