@@ -20,21 +20,21 @@ I built this because I loved what Wispr Flow could do but didn't love sending my
 
 Grab it at [plynn.vercel.app](https://plynn.vercel.app), or grab `Plynn.dmg` from [Releases](../../releases), drag Plynn to Applications, and launch. The app is notarized, so there's nothing to bypass. Onboarding asks for microphone and accessibility permissions, and the speech models (about 1 GB) download in the background while Apple's built-in engine covers your first dictations.
 
-Requires macOS 26 (Tahoe) on Apple Silicon. Enable Apple Intelligence in System Settings to get the best polish engine.
+**This tree is a Sequoia 15 / Intel compatibility port.** Upstream Plynn requires macOS 26 (Tahoe) on Apple Silicon. Here the hold-to-talk loop, paste, dictionary, snippets, and rules polish run on macOS 15.7 Intel using Apple's on-device Speech recognizer. Parakeet, Apple Intelligence, and the Qwen MLX polish model are not available on this hardware.
 
 ## Build from source
 
 ```bash
-git clone https://github.com/31Carlton7/plynn.git
 cd plynn
 ./scripts/make-app.sh
+open build/Plynn.app
 ```
 
-You'll need Xcode 26 with the Metal toolchain component (`xcodebuild -downloadComponent MetalToolchain`). The build uses `xcodebuild` rather than plain `swift build` because the MLX Metal shaders require it. `swift test` runs the 80+ unit tests.
+Needs the macOS Command Line Tools (Swift 6.1+) or Xcode 16. No Xcode 26 / Metal toolchain. After the first launch, grant Microphone, Speech Recognition, and Accessibility, then relaunch.
 
 ## How it's put together
 
-Speech recognition is Parakeet TDT running on the Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio), streaming partials as you speak. A deterministic rules pass handles spoken punctuation instantly, then a small on-device language model does the heavier cleanup, but only when the transcript actually needs it. Clean short dictations skip the model entirely and paste immediately. A latency gate, basically.
+On this Sequoia Intel port, speech recognition is Apple's on-device Speech framework. A deterministic rules pass still handles spoken punctuation, snippets, and your dictionary. The Neural Engine Parakeet stack and the MLX polish model are Apple Silicon / macOS 26 only.
 
 Your dictionary, snippets, and history live in one SQLite file at `~/Library/Application Support/Plynn/`. Nothing is sent anywhere, ever. There's no account, no telemetry, and no server to go down.
 

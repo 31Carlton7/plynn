@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import AppKit
 
 /// Sound and haptic cues for the dictation lifecycle.

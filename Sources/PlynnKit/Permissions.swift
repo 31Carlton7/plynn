@@ -1,6 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import AppKit
 import ApplicationServices
+@preconcurrency import Speech
 
 /// Permission checks and actions. All checks are poll-based — macOS has no
 /// grant notifications for Accessibility.
@@ -14,6 +15,10 @@ public enum Permissions {
         AXIsProcessTrusted()
     }
 
+    public static func speechGranted() -> Bool {
+        SFSpeechRecognizer.authorizationStatus() == .authorized
+    }
+
     /// Globe key set to "Do Nothing" (0) so it can't fight Plynn's fn hotkey.
     public static func globeKeySafe() -> Bool {
         let defaults = UserDefaults(suiteName: "com.apple.HIToolbox")
@@ -23,6 +28,10 @@ public enum Permissions {
 
     public static func requestMic() {
         AVCaptureDevice.requestAccess(for: .audio) { _ in }
+    }
+
+    public static func requestSpeech() {
+        SFSpeechRecognizer.requestAuthorization { _ in }
     }
 
     /// Shows the system Accessibility prompt (once per TCC state).

@@ -1,39 +1,29 @@
 #!/bin/bash
+# Build a Sequoia 15 / Intel .app with Command Line Tools (no Xcode 26, no MLX).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-IDENTITY="${IDENTITY:-Developer ID Application: Carlton Aikins (FY9QB79VAP)}"
 
-# MLX's Metal shaders only compile under xcodebuild — SwiftPM CLI builds ship
-# no metallib and the LLM dies at runtime (see mlx-swift README).
-xcodebuild build -scheme Plynn -configuration Release \
-  -destination 'platform=macOS' \
-  -derivedDataPath build/DerivedData -quiet
+swift build -c release --product Plynn
 
-BUILT="build/DerivedData/Build/Products/Release"
+BIN="$(swift build -c release --show-bin-path)/Plynn"
 APP="build/Plynn.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BUILT/Plynn" "$APP/Contents/MacOS/Plynn"
-# SPM resource bundles (incl. mlx-swift_Cmlx.bundle with mlx.metallib) resolve
-# via Bundle.main.resourceURL inside an .app — they belong in Contents/Resources.
-for b in "$BUILT"/*.bundle; do
-  cp -R "$b" "$APP/Contents/Resources/"
-done
-# Sparkle ships as a binary framework; it must live in Contents/Frameworks.
-mkdir -p "$APP/Contents/Frameworks"
-SPARKLE=$(find build/DerivedData -type d -name "Sparkle.framework" -not -path "*dSYM*" | head -1)
-ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
+cp "$BIN" "$APP/Contents/MacOS/Plynn"
 cp scripts/Info.plist "$APP/Contents/Info.plist"
-cp scripts/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Plynn" 2>/dev/null || true
-codesign --force --options runtime \
-  --sign "$IDENTITY" "$APP/Contents/Frameworks/Sparkle.framework"
-codesign --force --options runtime --deep \
-  --entitlements scripts/plynn.entitlements \
-  --sign "$IDENTITY" "$APP"
-echo "Built and signed $APP"
+if [[ -f scripts/AppIcon.icns ]]; then
+  cp scripts/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+fi
 
-# --install: replace the copy in /Applications (relaunch is the caller's job).
+# Ad-hoc sign so TCC (mic / speech / accessibility) can attach to the bundle.
+# Skip --options runtime: hardened runtime + ad-hoc often blocks the event tap
+# on Sequoia without a Developer ID.
+codesign --force --deep \
+  --entitlements scripts/plynn.entitlements \
+  --sign - "$APP"
+
+echo "Built $APP (Intel / macOS 15, Apple Speech on-device)"
+
 if [[ "${1:-}" == "--install" ]]; then
   rm -rf /Applications/Plynn.app
   ditto "$APP" /Applications/Plynn.app

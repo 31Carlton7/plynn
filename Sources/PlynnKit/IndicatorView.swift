@@ -23,55 +23,53 @@ enum IndicatorMetrics {
     static let bottomMargin: CGFloat = 14
 }
 
-/// The floating capsule: Liquid Glass surface whose bottom third is a live
-/// waveform blended into the glass, centered text that fades up and slides
+/// The floating capsule: Sequoia material surface whose bottom third is a live
+/// waveform blended into the pill, centered text that fades up and slides
 /// as it overflows, and a close-in checkmark on success.
 struct IndicatorView: View {
     @Bindable var model: IndicatorModel
-    @Namespace private var glassNS
 
     private var isCompact: Bool { model.phase == .done }
 
     var body: some View {
-        GlassEffectContainer {
-            ZStack {
-                // Bottom-blended visualizer — always present (inert when
-                // hidden) so phase changes never reset its motion.
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    BottomWave(levels: model.levels, idle: model.phase == .transcribing)
-                        .frame(height: IndicatorMetrics.waveHeight)
-                }
-                .opacity(waveOpacity)
+        ZStack {
+            Capsule()
+                .fill(.ultraThinMaterial)
+            Capsule()
+                .fill(Color.black.opacity(0.32))
 
-                centerContent
+            // Bottom-blended visualizer — always present (inert when
+            // hidden) so phase changes never reset its motion.
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                BottomWave(levels: model.levels, idle: model.phase == .transcribing)
+                    .frame(height: IndicatorMetrics.waveHeight)
             }
-            .frame(
-                width: isCompact ? IndicatorMetrics.compactWidth : IndicatorMetrics.width,
-                height: IndicatorMetrics.height)
-            .clipShape(Capsule())
-            .glassEffect(.regular.tint(.black.opacity(0.18)).interactive(), in: .capsule)
-            .glassEffectID("capsule", in: glassNS)
-            // Explicit glass character — a bright rim light along the top edge
-            // and a soft specular sheen, visible on any background.
-            .overlay(
-                Capsule().strokeBorder(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.5), location: 0),
-                            .init(color: .white.opacity(0.06), location: 0.35),
-                            .init(color: .white.opacity(0.18), location: 1),
-                        ],
-                        startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1))
-            .overlay(
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [.white.opacity(0.10), .clear],
-                            startPoint: .top, endPoint: .center))
-                    .allowsHitTesting(false))
+            .opacity(waveOpacity)
+
+            centerContent
         }
+        .frame(
+            width: isCompact ? IndicatorMetrics.compactWidth : IndicatorMetrics.width,
+            height: IndicatorMetrics.height)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule().strokeBorder(
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(0.5), location: 0),
+                        .init(color: .white.opacity(0.06), location: 0.35),
+                        .init(color: .white.opacity(0.18), location: 1),
+                    ],
+                    startPoint: .top, endPoint: .bottom),
+                lineWidth: 1))
+        .overlay(
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [.white.opacity(0.10), .clear],
+                        startPoint: .top, endPoint: .center))
+                .allowsHitTesting(false))
         .contentShape(Capsule())
         .onTapGesture { model.onTap?() }
         .animation(.spring(response: 0.38, dampingFraction: 0.82), value: model.phase)

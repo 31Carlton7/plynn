@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 
 public enum AudioLevel {
     /// Root-mean-square level of a sample chunk (0 for empty input).
