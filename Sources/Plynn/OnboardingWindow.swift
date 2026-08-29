@@ -5,6 +5,7 @@ import SwiftUI
 struct OnboardingView: View {
     let engineManager: EngineManager
     @State private var mic = Permissions.micGranted()
+    @State private var speech = Permissions.speechGranted()
     @State private var ax = Permissions.accessibilityGranted()
     @State private var globe = Permissions.globeKeySafe()
     @State private var grantedAxThisRun = false
@@ -15,7 +16,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Set up Plynn")
                 .font(.title2.bold())
-            Text("Three quick steps, then hold **fn** anywhere and talk.")
+            Text("A few quick steps, then hold **fn** anywhere and talk.")
                 .foregroundStyle(.secondary)
             Text("Using a third-party keyboard and fn doesn't do anything? Change the activation key under Settings → Hotkey.")
                 .font(.caption)
@@ -24,6 +25,10 @@ struct OnboardingView: View {
             row(done: mic, title: "Microphone",
                 detail: "Plynn hears you only while a hotkey is held.") {
                 Button("Grant") { Permissions.requestMic() }
+            }
+            row(done: speech, title: "Speech Recognition",
+                detail: "Turns what you say into text on this Mac — nothing is uploaded.") {
+                Button("Grant") { Permissions.requestSpeech() }
             }
             row(done: ax, title: "Accessibility",
                 detail: "Lets Plynn see the fn key and paste text for you.") {
@@ -52,7 +57,7 @@ struct OnboardingView: View {
             }
             .font(.callout)
 
-            if mic && ax {
+            if mic && speech && ax {
                 Text("Ready — focus any text field, hold **fn**, and speak.")
                     .font(.callout)
                     .foregroundStyle(.green)
@@ -62,6 +67,7 @@ struct OnboardingView: View {
         .frame(width: 460)
         .onReceive(timer) { _ in
             mic = Permissions.micGranted()
+            speech = Permissions.speechGranted()
             let axNow = Permissions.accessibilityGranted()
             if axNow && !ax { grantedAxThisRun = true }
             ax = axNow

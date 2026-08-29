@@ -3,25 +3,12 @@ import PackageDescription
 
 let package = Package(
     name: "Plynn",
-    platforms: [.macOS("26.0")],
-    dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.5"),
-        .package(url: "https://github.com/ml-explore/mlx-swift-examples.git", from: "2.29.1"),
-        .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.6.0"),
-    ],
+    platforms: [.macOS(.v15)],
     targets: [
-        .target(
-            name: "PlynnKit",
-            dependencies: [
-                .product(name: "FluidAudio", package: "FluidAudio"),
-                .product(name: "MLXLLM", package: "mlx-swift-examples"),
-            ]),
+        .target(name: "PlynnKit"),
         .executableTarget(
             name: "Plynn",
-            dependencies: [
-                "PlynnKit",
-                .product(name: "Sparkle", package: "Sparkle"),
-            ]),
+            dependencies: ["PlynnKit"]),
         .testTarget(
             name: "PlynnKitTests",
             dependencies: ["PlynnKit"],

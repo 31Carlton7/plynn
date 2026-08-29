@@ -6,6 +6,10 @@ final class AppleSpeechEngineTests: XCTestCase {
         let engine = AppleSpeechEngine()
         do { try await engine.start() } catch AppleSpeechEngine.EngineError.assetUnavailable {
             throw XCTSkip("English speech asset unavailable on this machine")
+        } catch AppleSpeechEngine.EngineError.notAuthorized {
+            throw XCTSkip("Speech recognition not authorized in this test environment")
+        } catch AppleSpeechEngine.EngineError.recognizerUnavailable {
+            throw XCTSkip("Speech recognizer unavailable")
         }
         nonisolated(unsafe) var partials: [String] = []
         await engine.setPartialCallback { partials.append($0) }
@@ -22,6 +26,10 @@ final class AppleSpeechEngineTests: XCTestCase {
         let engine = AppleSpeechEngine()
         do { try await engine.start() } catch AppleSpeechEngine.EngineError.assetUnavailable {
             throw XCTSkip("English speech asset unavailable on this machine")
+        } catch AppleSpeechEngine.EngineError.notAuthorized {
+            throw XCTSkip("Speech recognition not authorized in this test environment")
+        } catch AppleSpeechEngine.EngineError.recognizerUnavailable {
+            throw XCTSkip("Speech recognizer unavailable")
         }
         let samples = try AudioFile.loadSamples16kMono(
             url: Bundle.module.url(forResource: "Fixtures/short.wav", withExtension: nil)!)

@@ -30,14 +30,12 @@
 	<key>CFBundleVersion</key>
 	<string>9</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>26.0</string>
+	<string>15.0</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Plynn records your voice while you hold the fn key to transcribe it on-device.</string>
-	<key>SUFeedURL</key>
-	<string>https://github.com/31Carlton7/plynn/releases/latest/download/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>RUQWPEDzgPh9Qj1GH959liET1qvj5CDLeJR6DYrSaYQ=</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Plynn turns your speech into text on this Mac using Apple's on-device recognizer.</string>
 </dict>
 </plist>

@@ -1,5 +1,5 @@
-import AVFoundation
-import ScreenCaptureKit
+@preconcurrency import AVFoundation
+@preconcurrency import ScreenCaptureKit
 
 /// Captures a meeting: your microphone AND the other side of the call
 /// (system audio), via one ScreenCaptureKit stream. Both feeds are already

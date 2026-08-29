@@ -55,13 +55,12 @@ struct SettingsPane: View {
 
     var body: some View {
         Form {
-            Section("Transcription") {
-                Picker("Engine", selection: $engineManager.preferred) {
-                    Text("Automatic").tag(EngineChoice.auto)
-                    Text("Parakeet (local)").tag(EngineChoice.parakeet)
-                    Text("Apple (built-in)").tag(EngineChoice.apple)
-                }
-                LabeledContent("Status", value: engineManager.statusLine)
+            Section {
+                LabeledContent("Engine", value: engineManager.statusLine)
+            } header: {
+                Text("Transcription")
+            } footer: {
+                Text("This Sequoia Intel build uses Apple's on-device Speech recognizer. Parakeet and the Qwen polish model need Apple Silicon and macOS 26.")
             }
             Section {
                 Picker("Activation key", selection: $hotkeyTrigger) {
@@ -80,7 +79,7 @@ struct SettingsPane: View {
             } header: {
                 Text("Formatting")
             } footer: {
-                Text("Polish removes filler words, applies self-corrections, formats lists, and matches tone to the app — on-device via Apple Intelligence. Corrections you make right after a paste teach the dictionary automatically. Everything stays on this Mac.")
+                Text("On this Intel Sequoia build, polish is the on-device rules pass: spoken punctuation, snippets, and your dictionary. Apple Intelligence and the local Qwen model are not available on Intel. Corrections you make right after a paste still teach the dictionary.")
             }
             Section {
                 Toggle("Sound effects", isOn: $soundEffects)

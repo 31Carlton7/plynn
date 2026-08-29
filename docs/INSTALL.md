@@ -15,7 +15,7 @@ Updates arrive through Sparkle: the app tells you when a new version exists and 
 
 ## Release engineering
 
-- `make-app.sh` builds with `xcodebuild` (the MLX Metal shaders require it) and produces a signed .app with SPM resource bundles in `Contents/Resources`.
+- `make-app.sh` builds with `swift build` (Command Line Tools on Sequoia 15 / Intel) and ad-hoc signs `build/Plynn.app`.
 - `notarize.sh` submits to Apple with `notarytool` and staples the ticket.
 - `make-dmg.sh` packages the drag to Applications DMG. Pass `SKIP_BUILD=1` after notarizing so the stapled app is packaged as is.
 - `make-release.sh` runs the whole chain and publishes the GitHub release with a signed Sparkle appcast.

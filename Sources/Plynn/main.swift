@@ -1,6 +1,5 @@
 import AppKit
 import PlynnKit
-import Sparkle
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -19,8 +18,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.onboarding.show()
     }
     var statusItem: NSStatusItem!
-    let updater = SPUStandardUpdaterController(
-        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     let store = try? PersonalStore(path: PersonalStore.defaultPath())
     lazy var formatter = TranscriptFormatter(personalization: { [store] in
@@ -61,7 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               Metrics.residentMB(), AXIsProcessTrusted() ? 1 : 0)
         setUpStatusItem()
 
-        if !Permissions.micGranted() || !Permissions.accessibilityGranted() {
+        if !Permissions.micGranted() || !Permissions.speechGranted()
+            || !Permissions.accessibilityGranted()
+        {
             onboarding.show()
         }
 
@@ -86,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog("plynn: polish engine %@; RSS %.0f MB",
                   await formatter.polishEngine ?? "none (rules only)", Metrics.residentMB())
             if let reason = await formatter.appleFMStatus {
-                NSLog("plynn: Apple Intelligence %@", reason)
+                NSLog("plynn: polish %@", reason)
             }
         }
 
@@ -315,7 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = Self.defaultMeetingTitle(started)
         meetingID = try? store?.addMeeting(title: title, startedAt: started)
 
-        // Meetings always run on Parakeet: it streams and has no session cap.
+        // Meetings use the same on-device Apple Speech engine as dictation.
         let engine = engineManager.engineForNewSession()
         meetingEngine = engine
         let (stream, continuation) = AsyncStream.makeStream(of: [Float].self)
@@ -372,8 +371,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var meetingSegmentStart: TimeInterval = 0
     func meetingPartial(_ text: String) {
         let elapsed = meetingRecorder?.elapsed ?? 0
-        // Parakeet's partial grows monotonically within an utterance and
-        // shrinks when a new one starts — the shrink is our segment boundary.
+        // The recognizer's partial grows within an utterance and shrinks
+        // when a new one starts — the shrink is our segment boundary.
         if text.count < meetingLastPartial.count, !meetingLastPartial.isEmpty {
             meetingTranscript.append(meetingLastPartial, at: meetingSegmentStart)
             meetingSegmentStart = elapsed
@@ -510,13 +509,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             title: "Start Meeting Notes", action: #selector(toggleMeeting), keyEquivalent: "m")
         meetingItem.target = self
         menu.addItem(meetingItem)
-        menu.addItem(.separator())
-        let updateItem = NSMenuItem(
-            title: "Check for Updates…",
-            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
-            keyEquivalent: "")
-        updateItem.target = updater
-        menu.addItem(updateItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit Plynn", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))

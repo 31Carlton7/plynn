@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 
 public enum Resampler {
     public enum ResampleError: Error { case noConverter }

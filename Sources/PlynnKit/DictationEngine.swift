@@ -1,9 +1,8 @@
 import Foundation
 
 /// A streaming dictation engine: feed 16 kHz mono samples, get live partials
-/// via callback and a final transcript from finish(). Implementations:
-/// `StreamingTranscriber` (Parakeet, local download) and `AppleSpeechEngine`
-/// (SpeechTranscriber, zero-download OS fallback).
+/// via callback and a final transcript from finish(). On this Sequoia Intel
+/// build the only implementation is `AppleSpeechEngine` (on-device Speech).
 public protocol DictationEngine: Actor {
     nonisolated var displayName: String { get }
     /// Load whatever the engine needs (idempotent) and reset for a new session.

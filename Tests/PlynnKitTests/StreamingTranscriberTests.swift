@@ -4,7 +4,11 @@ import XCTest
 final class StreamingTranscriberTests: XCTestCase {
     func testStreamedFixtureProducesPartialsAndFinal() async throws {
         let st = StreamingTranscriber()
-        try await st.start()
+        do { try await st.start() } catch AppleSpeechEngine.EngineError.assetUnavailable {
+            throw XCTSkip("English on-device speech asset unavailable on this machine")
+        } catch AppleSpeechEngine.EngineError.notAuthorized {
+            throw XCTSkip("Speech recognition not authorized in this test environment")
+        }
         nonisolated(unsafe) var partials: [String] = []
         await st.setPartialCallback { partials.append($0) }
         let samples = try AudioFile.loadSamples16kMono(
@@ -19,7 +23,11 @@ final class StreamingTranscriberTests: XCTestCase {
 
     func testSilenceProducesEmptyTranscript() async throws {
         let st = StreamingTranscriber()
-        try await st.start()
+        do { try await st.start() } catch AppleSpeechEngine.EngineError.assetUnavailable {
+            throw XCTSkip("English on-device speech asset unavailable on this machine")
+        } catch AppleSpeechEngine.EngineError.notAuthorized {
+            throw XCTSkip("Speech recognition not authorized in this test environment")
+        }
         try await st.append(samples: [Float](repeating: 0, count: 48_000))  // 3 s silence
         let final = try await st.finish()
         XCTAssertEqual(final.trimmingCharacters(in: .whitespacesAndNewlines), "",
@@ -28,7 +36,11 @@ final class StreamingTranscriberTests: XCTestCase {
 
     func testReuseAcrossSessions() async throws {
         let st = StreamingTranscriber()
-        try await st.start()
+        do { try await st.start() } catch AppleSpeechEngine.EngineError.assetUnavailable {
+            throw XCTSkip("English on-device speech asset unavailable on this machine")
+        } catch AppleSpeechEngine.EngineError.notAuthorized {
+            throw XCTSkip("Speech recognition not authorized in this test environment")
+        }
         let samples = try AudioFile.loadSamples16kMono(
             url: Bundle.module.url(forResource: "Fixtures/short.wav", withExtension: nil)!)
         try await st.append(samples: samples)

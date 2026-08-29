@@ -1,7 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 
 public enum AudioFile {
-    public static let targetFormat = AVAudioFormat(
+    nonisolated(unsafe) public static let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
 
     /// Reads any audio file and returns 16 kHz mono Float32 samples.
