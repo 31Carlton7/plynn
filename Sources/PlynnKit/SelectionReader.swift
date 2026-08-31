@@ -15,9 +15,7 @@ public enum SelectionReader {
         else { return nil }
         let element = focusedRef as! AXUIElement
 
-        var roleRef: CFTypeRef?
-        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
-        if roleRef as? String == "AXSecureTextField" { return nil }
+        if FieldReader.isSecureField(element) { return nil }
 
         var selectionRef: CFTypeRef?
         guard

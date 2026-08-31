@@ -1,4 +1,15 @@
 import Foundation
+import XCTest
+
+enum TestConfiguration {
+    /// Model-backed tests are opt-in so ordinary CI stays deterministic and
+    /// does not download or initialize the Neural Engine model.
+    static func requireModelIntegration() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["PLYNN_RUN_MODEL_TESTS"] == "1",
+            "Model integration tests disabled; set PLYNN_RUN_MODEL_TESTS=1 to run them")
+    }
+}
 
 extension Array {
     /// Split into consecutive slices of at most `size` elements — used to feed

@@ -2,6 +2,10 @@ import XCTest
 @testable import PlynnKit
 
 final class AppleSpeechEngineTests: XCTestCase {
+    override func setUpWithError() throws {
+        try TestConfiguration.requireModelIntegration()
+    }
+
     func testTranscribesFixtureWithPartials() async throws {
         let engine = AppleSpeechEngine()
         do { try await engine.start() } catch AppleSpeechEngine.EngineError.assetUnavailable {

@@ -4,6 +4,10 @@ import XCTest
 final class TranscriberTests: XCTestCase {
     nonisolated(unsafe) static var transcriber: Transcriber!
 
+    override func setUpWithError() throws {
+        try TestConfiguration.requireModelIntegration()
+    }
+
     override class func setUp() {
         super.setUp()
         transcriber = Transcriber()
