@@ -47,7 +47,7 @@ public enum PolishPrompt {
             break
         }
         if technical {
-            p += "\n- Preserve technical terms, code identifiers (camelCase, snake_case), file names, and shell commands exactly as spoken."
+            p += "\n- Preserve technical terms, code identifiers (camelCase, snake_case), file names, shell commands, and explicit @file references exactly. Do not invent or remove @file references."
         }
         if !preferredSpellings.isEmpty {
             p += "\n- Use these exact spellings when the transcript approximates them: "

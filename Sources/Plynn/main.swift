@@ -28,8 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     })
     var pendingPressEnter = false
     var lastCaptureSeconds = 0.0
-    /// Non-nil when the session began with text selected → command mode.
-    var pendingSelection: String?
+    /// Captured at fn-down so formatting uses the original target app.
+    var pendingContext: ContextSnapshot?
+    var pendingFileCandidates: Task<[String], Never>?
 
     // Meeting mode
     var meetingRecorder: MeetingRecorder?
@@ -160,7 +161,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.resetLevels()
             panel.show()
 
-            pendingSelection = SelectionReader.selectedText()
+            let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            let context = ContextSnapshot(
+                bundleID: bundleID,
+                selectedText: SelectionReader.selectedText(),
+                workspaceRoot: CodexCLIContextReader.read()?.workspaceRoot)
+            pendingContext = context
+            if context.profile.isTechnical, let workspaceRoot = context.workspaceRoot {
+                pendingFileCandidates = Task.detached(priority: .utility) {
+                    WorkspaceFileIndex.candidates(at: workspaceRoot)
+                }
+            }
 
             let (stream, continuation) = AsyncStream.makeStream(of: [Float].self)
             chunkContinuation = continuation
@@ -232,10 +243,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let engine = sessionEngine
             let formatter = formatter
             let transcriptionReleaseAt = releasedAt
-            let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             let aiPolish = UserDefaults.standard.object(forKey: "aiPolish") as? Bool ?? true
-            let selection = pendingSelection
-            pendingSelection = nil
+            let context = pendingContext ?? ContextSnapshot(
+                bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+            let fileCandidatesTask = pendingFileCandidates
+            pendingContext = nil
+            pendingFileCandidates = nil
+            let bundleID = context.bundleID
             Task {
                 await feedTask?.value  // all chunks fed, in order
                 if let transcriptionReleaseAt {
@@ -267,7 +281,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 // Command mode: selection + spoken instruction → replace it.
-                if let selection, !raw.trimmingCharacters(in: .whitespaces).isEmpty {
+                if let selection = context.selectedText,
+                    !raw.trimmingCharacters(in: .whitespaces).isEmpty {
                     let transformed = await formatter.transform(
                         selection: selection, instruction: raw)
                     if let transcriptionReleaseAt {
@@ -296,11 +311,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                let result = await formatter.format(raw, bundleID: bundleID, aiPolish: aiPolish)
+                let fileCandidates = await fileCandidatesTask?.value ?? []
+                let result = await formatter.format(
+                    raw,
+                    context: context.withFileCandidates(fileCandidates),
+                    aiPolish: aiPolish)
                 if let transcriptionReleaseAt {
                     NSLog("plynn: [fn-release-to-format %@] ai-polish %d",
                           "\(transcriptionReleaseAt.duration(to: .now))", aiPolish ? 1 : 0)
                 }
+                // The watchdog may have already given up on this session;
+                // discarding here keeps a late result from pasting into
+                // whatever the user moved on to.
                 let canDeliver = await MainActor.run {
                     self.session.state == .transcribing
                 }
@@ -322,7 +344,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case .discardRecording:
-            pendingSelection = nil
+            pendingContext = nil
+            pendingFileCandidates?.cancel()
+            pendingFileCandidates = nil
             let discarded = recorder?.stop() ?? []
             // Stay silent for the sub-minHold taps that also discard — including
             // the first half of a hands-free double-tap, where a cancel cue

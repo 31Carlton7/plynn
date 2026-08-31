@@ -40,6 +40,17 @@ If cached model startup times out, the setup window tells you to relaunch
 Plynn. A transcript is copied to the clipboard when the focused field cannot
 be safely targeted, so you can press `⌘V` manually.
 
+### Optional Codex CLI context
+
+Plynn can resolve spoken filenames against the local repository used by Codex CLI. Source `scripts/plynn-codex-context.zsh` from your `~/.zshrc`, then launch Codex with `plynn_codex` instead of `codex`:
+
+```zsh
+source /path/to/plynn/scripts/plynn-codex-context.zsh
+plynn_codex
+```
+
+The bridge shares the workspace path only. Plynn indexes bounded, unique filenames locally; it does not read file contents or send context over the network.
+
 ## How it's put together
 
 Speech recognition is Parakeet Unified running on the Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio), streaming partials as you speak. A deterministic rules pass handles spoken punctuation instantly, then a small on-device language model does the heavier cleanup, but only when the transcript actually needs it. Clean short dictations skip the model entirely and paste immediately. A latency gate, basically.
