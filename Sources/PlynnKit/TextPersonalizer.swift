@@ -49,12 +49,22 @@ public enum DictionaryCorrector {
         return result
     }
 
+    /// The ASR near-miss band, scaled to term length. Two edits on a short term
+    /// matches most short English words — "SWE" is two edits from "the", "npm"
+    /// from "app", "Neo" from "get" — so a flat distance of 2 marked nearly the
+    /// whole dictionary relevant to every transcript. Short terms must match at
+    /// distance 1; only terms long enough for two edits to stay distinctive get 2.
+    static func matchDistance(_ variant: String) -> Int {
+        variant.count <= 5 ? 1 : 2
+    }
+
     /// The subset of terms worth telling the LLM about for THIS transcript —
     /// with a large imported dictionary, sending all of it would bloat every
-    /// prompt. A term is relevant when some transcript word is within edit
-    /// distance 2 of the term or one of its aliases.
+    /// prompt and invites the model to echo the list back as output.
+    /// A term is relevant when some transcript word is within the near-miss
+    /// band of the term or one of its aliases.
     public static func relevantTerms(
-        for text: String, terms: [PersonalStore.Term]
+        for text: String, terms: [PersonalStore.Term], limit: Int = 12
     ) -> [String] {
         let words = text.lowercased()
             .split(whereSeparator: \.isWhitespace)
@@ -65,11 +75,12 @@ public enum DictionaryCorrector {
             let variants = ([term.text] + term.aliases)
                 .map { $0.lowercased() }.filter { $0.count >= 3 }
             return variants.contains { variant in
-                words.contains { word in
-                    abs(word.count - variant.count) <= 2
-                        && CorrectionLearner.editDistance(word, variant) <= 2
+                let allowed = matchDistance(variant)
+                return words.contains { word in
+                    abs(word.count - variant.count) <= allowed
+                        && CorrectionLearner.editDistance(word, variant) <= allowed
                 }
             }
-        }.map(\.text)
+        }.prefix(limit).map(\.text)
     }
 }

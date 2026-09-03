@@ -121,4 +121,36 @@ final class TextPersonalizerTests: XCTestCase {
         let relevant = DictionaryCorrector.relevantTerms(for: "ping akins now", terms: [aikins])
         XCTAssertEqual(relevant, ["Aikins"])
     }
+
+    /// Regression: a flat edit distance of 2 made every short term "relevant"
+    /// to every transcript — "SWE" is two edits from "the", "npm" from "app" —
+    /// so the whole dictionary rode along in the polish prompt.
+    func testRelevantTermsIgnoresShortTermsTwoEditsFromCommonWords() {
+        let shortTerms = ["Jay", "Neo", "SMU", "SWE", "Sid", "Sri", "Yaw", "npm", "n8n"]
+            .enumerated()
+            .map { PersonalStore.Term(id: Int64($0.offset + 20), text: $0.element, aliases: []) }
+        let transcript =
+            "Realm needs custom access with the macOS CLI so we are able to run "
+            + "any commands from it without having to ask for permissions again"
+        XCTAssertTrue(
+            DictionaryCorrector.relevantTerms(for: transcript, terms: shortTerms).isEmpty,
+            "short terms matched common words: "
+                + DictionaryCorrector.relevantTerms(for: transcript, terms: shortTerms)
+                    .joined(separator: ", "))
+    }
+
+    func testRelevantTermsStillMatchesShortTermAtOneEdit() {
+        let term = PersonalStore.Term(id: 30, text: "n8n", aliases: [])
+        XCTAssertEqual(
+            DictionaryCorrector.relevantTerms(for: "wire it up in nan today", terms: [term]),
+            ["n8n"])
+    }
+
+    func testRelevantTermsCapsListLength() {
+        let terms = (0..<40).map {
+            PersonalStore.Term(id: Int64($0), text: "Kubernetes\($0)", aliases: [])
+        }
+        XCTAssertLessThanOrEqual(
+            DictionaryCorrector.relevantTerms(for: "kubernetes1 deploy", terms: terms).count, 12)
+    }
 }

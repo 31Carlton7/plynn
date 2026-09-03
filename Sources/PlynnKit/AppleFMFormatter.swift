@@ -46,6 +46,7 @@ public actor AppleFMFormatter {
         let prompt = PolishPrompt.build(
             transcript: text, tone: tone, technical: technical,
             preferredSpellings: preferredSpellings)
-        return PolishPrompt.sanitize(await complete(prompt), input: text)
+        return PolishPrompt.sanitize(
+            await complete(prompt), input: text, glossary: preferredSpellings)
     }
 }
