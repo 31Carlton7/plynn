@@ -47,6 +47,7 @@ public actor AppleFMFormatter {
             transcript: text, tone: tone, technical: technical,
             preferredSpellings: preferredSpellings)
         return PolishPrompt.sanitize(
-            await complete(prompt), input: text, glossary: preferredSpellings)
+            await complete(prompt), input: text, glossary: preferredSpellings,
+            removeRepeatedTrailingList: true)
     }
 }

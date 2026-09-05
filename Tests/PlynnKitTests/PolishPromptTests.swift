@@ -96,6 +96,56 @@ final class PolishPromptTests: XCTestCase {
         XCTAssertEqual(PolishPrompt.sanitize(text, input: spoken, glossary: []), text)
     }
 
+    // MARK: sanitize — appended recap list
+
+    func testStripsAppendedTodoListRepeatedFromProse() {
+        let input = """
+            Whenever you're done with everything, use the D-slop skill over all of the PRs. Make sure that we have clean code written, then consolidate everything and merge it to the main code base. Release the new release and install it on my machine. Make sure everything works as intended.
+            """
+        let leaked = input + """
+
+
+            - Use the D-slop skill over all of the PRs
+            - Make sure that we have clean code written
+            - Consolidate everything and merge it to the main code base
+            - Release the new release and install it on my machine
+            - Make sure everything works as intended
+            """
+        XCTAssertEqual(
+            PolishPrompt.sanitize(leaked, input: input, removeRepeatedTrailingList: true),
+            input)
+    }
+
+    func testStripsNumberedRecapRepeatedFromProse() {
+        let body = "Review the changes. Run the tests."
+        let leaked = body + "\n\n1. Review the changes\n2. Run the tests"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(leaked, input: body, removeRepeatedTrailingList: true),
+            body)
+    }
+
+    func testKeepsStandaloneDictatedList() {
+        let list = "- Review the changes\n- Run the tests"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(
+                list, input: "first review the changes second run the tests",
+                removeRepeatedTrailingList: true),
+            list)
+    }
+
+    func testKeepsTrailingListWithNewContent() {
+        let text = "Here is the plan.\n\n- Review the changes\n- Run the tests"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(text, input: text, removeRepeatedTrailingList: true),
+            text)
+    }
+
+    func testSharedSanitizerKeepsIntentionalTransformList() {
+        let selection = "Review the changes. Run the tests."
+        let transformed = selection + "\n\n- Review the changes\n- Run the tests"
+        XCTAssertEqual(PolishPrompt.sanitize(transformed, input: selection), transformed)
+    }
+
     // MARK: existing sanitize behavior still holds
 
     func testStillUnquotesAndFallsBackOnRunaway() {
@@ -115,6 +165,7 @@ final class PolishPromptTests: XCTestCase {
             p.hasSuffix("- Output ONLY the cleaned text, nothing else."), "got tail: \(p.suffix(80))")
         XCTAssertTrue(p.contains("<glossary>"))
         XCTAssertTrue(p.contains("Never list, repeat, or append"))
+        XCTAssertTrue(p.contains("Never append a summary"))
     }
 
     func testNoGlossarySectionWhenNoSpellings() {
