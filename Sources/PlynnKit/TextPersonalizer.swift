@@ -62,10 +62,14 @@ public enum DictionaryCorrector {
     /// with a large imported dictionary, sending all of it would bloat every
     /// prompt and invites the model to echo the list back as output.
     /// A term is relevant when some transcript word is within the near-miss
-    /// band of the term or one of its aliases.
+    /// band of the term or one of its aliases. A real English word is never a
+    /// near-miss: "way" is one edit from "Jay" in most transcripts, but the
+    /// speaker said "way". Same rule `correct` applies to aliases.
     public static func relevantTerms(
-        for text: String, terms: [PersonalStore.Term], limit: Int = 12
+        for text: String, terms: [PersonalStore.Term], limit: Int = 12,
+        commonWords: Set<String>? = nil
     ) -> [String] {
+        let dictionary = commonWords ?? systemWords
         let words = text.lowercased()
             .split(whereSeparator: \.isWhitespace)
             .map { $0.trimmingCharacters(in: .punctuationCharacters) }
@@ -77,7 +81,9 @@ public enum DictionaryCorrector {
             return variants.contains { variant in
                 let allowed = matchDistance(variant)
                 return words.contains { word in
-                    abs(word.count - variant.count) <= allowed
+                    if word == variant { return true }
+                    if dictionary.contains(word) { return false }
+                    return abs(word.count - variant.count) <= allowed
                         && CorrectionLearner.editDistance(word, variant) <= allowed
                 }
             }

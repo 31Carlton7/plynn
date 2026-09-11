@@ -142,8 +142,32 @@ final class TextPersonalizerTests: XCTestCase {
     func testRelevantTermsStillMatchesShortTermAtOneEdit() {
         let term = PersonalStore.Term(id: 30, text: "n8n", aliases: [])
         XCTAssertEqual(
-            DictionaryCorrector.relevantTerms(for: "wire it up in nan today", terms: [term]),
+            DictionaryCorrector.relevantTerms(
+                for: "wire it up in n8m today", terms: [term],
+                commonWords: ["wire", "today"]),
             ["n8n"])
+    }
+
+    /// Regression: "the same way" pulled in the name "Jay" (one edit from
+    /// "way") and the polish model appended "**Glossary** - Jay: pdf". A real
+    /// English word is the speaker's word, never a mis-heard name.
+    func testRelevantTermsIgnoresRealWordsOneEditFromATerm() {
+        let jay = PersonalStore.Term(id: 31, text: "Jay", aliases: [])
+        let transcript = "it can generate guides the same way I would write them"
+        XCTAssertTrue(
+            DictionaryCorrector.relevantTerms(
+                for: transcript, terms: [jay], commonWords: ["way", "same", "write"]
+            ).isEmpty)
+        // Against the live system dictionary too.
+        XCTAssertTrue(DictionaryCorrector.relevantTerms(for: transcript, terms: [jay]).isEmpty)
+    }
+
+    func testRelevantTermsExactMatchStillCountsEvenIfItIsAWord() {
+        let will = PersonalStore.Term(id: 32, text: "Will", aliases: [])
+        XCTAssertEqual(
+            DictionaryCorrector.relevantTerms(
+                for: "ask will about it", terms: [will], commonWords: ["will", "ask", "about"]),
+            ["Will"])
     }
 
     func testRelevantTermsCapsListLength() {

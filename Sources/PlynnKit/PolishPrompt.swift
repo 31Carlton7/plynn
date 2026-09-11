@@ -51,20 +51,12 @@ public enum PolishPrompt {
             p += "\n- Preserve technical terms, code identifiers (camelCase, snake_case), file names, shell commands, and explicit @file references exactly. Do not invent or remove @file references."
         }
         if !preferredSpellings.isEmpty {
-            // Fenced and named so the model reads it as a lookup table, not as
-            // content to reproduce — small models otherwise append it verbatim.
-            p += """
-
-                - A <glossary> of preferred spellings follows. It is a reference \
-                table, NOT content: when a transcript word approximates a glossary \
-                entry, spell it the glossary's way. Never list, repeat, or append \
-                the glossary itself, and never mention a glossary entry the \
-                transcript does not already contain.
-
-                <glossary>
-                \(preferredSpellings.joined(separator: ", "))
-                </glossary>
-                """
+            // One unlabeled rule. Naming this a "glossary" and fencing it in a
+            // tag taught small models to append "**Glossary**" sections and a
+            // literal "<glossary>" trailer — a label is a thing to reproduce.
+            p += "\n- Spell these names exactly as written if the speaker says them: "
+                + preferredSpellings.joined(separator: ", ")
+                + ". Do not mention any name the speaker did not say."
         }
         // Always the final instruction: whatever sits last is what small models
         // weight most, and a trailing word list reads as a cue to emit one.
@@ -83,6 +75,7 @@ public enum PolishPrompt {
         if out.hasPrefix("\""), out.hasSuffix("\""), out.count > 2 {
             out = String(out.dropFirst().dropLast())
         }
+        out = stripScaffoldTail(out)
         out = stripGlossaryEcho(out, glossary: glossary, input: input)
         if removeRepeatedTrailingList {
             out = stripRepeatedTrailingList(out)
@@ -147,10 +140,35 @@ public enum PolishPrompt {
         .joined(separator: " ")
     }
 
+    /// Tokens from the prompt itself — tags and the "Cleaned text:" cue — that
+    /// a small model sometimes closes its answer with. Never legitimate output.
+    private static let scaffoldTokens: Set<String> = [
+        "<glossary>", "</glossary>", "<transcript>", "</transcript>", "cleaned text:",
+    ]
+
+    /// Drop trailing lines that are nothing but prompt scaffolding.
+    static func stripScaffoldTail(_ text: String) -> String {
+        var lines = text.components(separatedBy: .newlines)
+        var dropped = false
+        while let last = lines.last {
+            let t = last.trimmingCharacters(in: .whitespaces).lowercased()
+            if t.isEmpty || scaffoldTokens.contains(t) {
+                lines.removeLast()
+                dropped = dropped || !t.isEmpty
+            } else {
+                break
+            }
+        }
+        guard dropped else { return text }
+        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Belt-and-braces for the prompt rule above: drop a trailing block whose
-    /// every line is nothing but glossary entries. A block is only an echo when
-    /// it names at least one term the speaker never said — a block of purely
-    /// spoken terms is the speaker's own list and survives.
+    /// every line is glossary entries — bare, bulleted, comma-separated, or
+    /// "Term: gloss" definitions — plus a "Glossary"-style heading directly
+    /// above it. A block is only an echo when it names at least one term the
+    /// speaker never said; a block of purely spoken terms is the speaker's own
+    /// list and survives.
     static func stripGlossaryEcho(
         _ text: String, glossary: [String], input: String
     ) -> String {
@@ -176,6 +194,12 @@ public enum PolishPrompt {
                 i -= 1
                 continue
             }
+            if found, isGlossaryHeading(trimmed) {
+                // The heading the model wrote over its echo. Nothing above it
+                // belongs to the block.
+                cut = i
+                break
+            }
             // The whole line must be glossary terms, spoken or not. Judging
             // each line against only the unspoken terms let one spoken term
             // anchor the list and leave the rest of the echo standing.
@@ -190,14 +214,33 @@ public enum PolishPrompt {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// The glossary terms a line consists of — bare, bulleted, numbered, or
-    /// comma-separated — or nil when it carries any content beyond them.
+    /// "**Glossary**", "Glossary:", "Preferred spellings" and the like.
+    private static func isGlossaryHeading(_ line: String) -> Bool {
+        let bare = line.trimmingCharacters(in: CharacterSet(charactersIn: "*_#: \t"))
+            .lowercased()
+        return ["glossary", "preferred spellings", "spellings", "vocabulary", "terms", "names"]
+            .contains(bare)
+    }
+
+    /// The glossary terms a line consists of — bare, bulleted, numbered,
+    /// comma-separated, or a "Term: gloss" definition — or nil when it carries
+    /// any content beyond them.
     private static func glossaryTerms(_ line: String, _ known: Set<String>) -> [String]? {
         var body = line
         if let marker = body.range(
             of: "^\\s*(?:[-*•–—]|\\d+[.)])\\s+", options: .regularExpression)
         {
             body = String(body[marker.upperBound...])
+        }
+        // "Jay: pdf" / "Jay — pdf" / "**Jay** = pdf": a definition of a term.
+        if let sep = body.range(of: "\\s*(?::|—|–|=|\\s-\\s)\\s*", options: .regularExpression),
+            sep.lowerBound > body.startIndex
+        {
+            let head = body[..<sep.lowerBound]
+                .trimmingCharacters(in: .whitespaces)
+                .trimmingCharacters(in: .punctuationCharacters)
+                .lowercased()
+            if known.contains(head) { return [head] }
         }
         let parts = body.split(separator: ",").map {
             $0.trimmingCharacters(in: .whitespaces)

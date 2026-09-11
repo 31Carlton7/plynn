@@ -163,14 +163,74 @@ final class PolishPromptTests: XCTestCase {
             tone: .neutral, technical: true, preferredSpellings: glossary)
         XCTAssertTrue(
             p.hasSuffix("- Output ONLY the cleaned text, nothing else."), "got tail: \(p.suffix(80))")
-        XCTAssertTrue(p.contains("<glossary>"))
-        XCTAssertTrue(p.contains("Never list, repeat, or append"))
-        XCTAssertTrue(p.contains("Never append a summary"))
+        XCTAssertTrue(p.contains("Spell these names exactly as written"))
+        XCTAssertTrue(p.contains("Jay, Kerry"))
+    }
+
+    /// Regression: naming the list a <glossary> taught the model to append a
+    /// "**Glossary**" section and a literal "<glossary>" trailer. The word and
+    /// the tag must not appear anywhere the model can copy them from.
+    func testPromptNeverSaysGlossaryOrUsesATag() {
+        let p = PolishPrompt.instructions(
+            tone: .neutral, technical: true, preferredSpellings: glossary)
+        XCTAssertFalse(p.lowercased().contains("glossary"), "got: \(p)")
+        XCTAssertFalse(p.contains("<glossary"), "got: \(p)")
     }
 
     func testNoGlossarySectionWhenNoSpellings() {
         let p = PolishPrompt.instructions(tone: .casual, technical: false)
-        XCTAssertFalse(p.contains("<glossary>"))
+        XCTAssertFalse(p.contains("Spell these names"))
         XCTAssertTrue(p.hasSuffix("- Output ONLY the cleaned text, nothing else."))
+    }
+
+    // MARK: echo shapes seen in the wild after the Sep 1 fix
+
+    /// The reported bug: a heading plus a "Term: gloss" definition line.
+    func testStripsGlossaryHeadingWithDefinitionLine() {
+        let body = "So now it can generate guides for me the same way I would write them myself."
+        let leaked = body + "\n\n**Glossary**  \n- Jay: pdf"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(leaked, input: body, glossary: ["Jay"]), body)
+    }
+
+    func testStripsDefinitionLinesWithDashAndBold() {
+        let leaked = spoken + "\n\nGlossary:\n- **Jay** — a name\n- Kerry - another"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(leaked, input: spoken, glossary: glossary), spoken)
+    }
+
+    /// Nine of ten artifacts: the model closed its answer with the tag itself.
+    func testStripsLiteralGlossaryTagTrailer() {
+        let leaked = spoken + "\n\n<glossary>"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(leaked, input: spoken, glossary: glossary), spoken)
+        XCTAssertEqual(
+            PolishPrompt.sanitize(spoken + "\n</glossary>\n", input: spoken, glossary: []), spoken)
+    }
+
+    func testStripsTagThenEchoedList() {
+        let leaked = spoken + "\n\n- Jay\n- npm\n</glossary>"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(leaked, input: spoken, glossary: glossary), spoken)
+    }
+
+    func testStripsCleanedTextCueTrailer() {
+        XCTAssertEqual(
+            PolishPrompt.sanitize(spoken + "\n\nCleaned text:", input: spoken), spoken)
+    }
+
+    /// A heading is only consumed when an echo sits under it — a dictated
+    /// "Glossary" heading over real content is the speaker's own.
+    func testKeepsDictatedGlossaryHeadingOverRealContent() {
+        let text = "Notes from today.\n\nGlossary:\n- latency is how long a round trip takes"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(text, input: text, glossary: glossary), text)
+    }
+
+    /// A definition of a term the speaker actually said is content.
+    func testKeepsDefinitionOfSpokenTerm() {
+        let text = "Two names to know.\n\n- Jay: runs infra\n- Kerry: runs design"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(text, input: text, glossary: glossary), text)
     }
 }
