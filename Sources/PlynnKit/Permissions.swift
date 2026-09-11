@@ -21,8 +21,20 @@ public enum Permissions {
             && defaults?.object(forKey: "AppleFnUsageType") != nil
     }
 
+    /// requestAccess only prompts while the status is .notDetermined; once the
+    /// mic has been denied it returns without showing anything, so the button
+    /// has to send the user to Settings instead.
     public static func requestMic() {
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        } else {
+            openMicrophoneSettings()
+        }
+    }
+
+    public static func openMicrophoneSettings() {
+        NSWorkspace.shared.open(URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
     }
 
     /// Shows the system Accessibility prompt (once per TCC state).
