@@ -389,7 +389,7 @@ MainActor.assumeIsolated {
         }
         print("dictation frames done")
     case "og":
-        let r = ImageRenderer(content: OGCard().frame(width: 1200, height: 630).environment(\.colorScheme, .light))
+        let r = ImageRenderer(content: OGCard().frame(width: 1200, height: 630).environment(\.colorScheme, .dark))
         r.scale = 2
         if let cg = r.cgImage,
             let d = CGImageDestinationCreateWithURL(out.appendingPathComponent("og.png") as CFURL, UTType.png.identifier as CFString, 1, nil) {
@@ -405,26 +405,36 @@ MainActor.assumeIsolated {
     }
 }
 
-// 1200×630 social share card: site headline + the pill, brand-clean.
+// 1200×630 social share card: the site's dark hero, the app icon, the pill.
 struct OGCard: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
-            LinearGradient(
-                colors: [.white, Color(red: 0.955, green: 0.955, blue: 0.965)],
-                startPoint: .top, endPoint: .bottom)
+            Color(red: 0.03, green: 0.03, blue: 0.04)
+            ZStack {
+                Ellipse().fill(Color(red: 1, green: 0.48, blue: 0.27).opacity(0.55)).frame(width: 620, height: 260).offset(x: -300, y: 330)
+                Ellipse().fill(Color(red: 0.89, green: 0.28, blue: 0.48).opacity(0.5)).frame(width: 560, height: 220).offset(x: 40, y: 350)
+                Ellipse().fill(Color(red: 0.54, green: 0.3, blue: 0.9).opacity(0.6)).frame(width: 600, height: 300).offset(x: 380, y: 300)
+                Ellipse().fill(Color(red: 0.18, green: 0.27, blue: 0.78).opacity(0.35)).frame(width: 760, height: 300).offset(x: 260, y: -320)
+            }
+            .blur(radius: 90)
+            .frame(width: 1200, height: 630)
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 12) {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color(red: 0.12, green: 0.13, blue: 0.17))
-                        .frame(width: 34, height: 34)
-                        .overlay(Capsule().fill(.white.opacity(0.85)).frame(width: 18, height: 8))
-                    Text("Plynn").font(.system(size: 22, weight: .medium)).foregroundStyle(.black.opacity(0.6))
+                HStack(spacing: 14) {
+                    if let icon = NSImage(contentsOfFile: "site/assets/icon.png") {
+                        Image(nsImage: icon).resizable().frame(width: 60, height: 60).padding(-6)
+                    }
+                    Text("Plynn").font(.system(size: 24, weight: .medium)).foregroundStyle(.white.opacity(0.9))
                 }
                 Spacer()
                 Text("Dictation that never\ntouches the internet.")
-                    .font(.system(size: 64, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.9))
-                    .lineSpacing(2)
+                    .font(.system(size: 68, weight: .semibold))
+                    .kerning(-2.2)
+                    .foregroundStyle(.white.opacity(0.95))
+                    .lineSpacing(0)
+                Text("Free, open source, and 100% on your Mac.")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(.top, 16)
                 Spacer()
                 HStack {
                     Pill(t: 1.1, width: 470, text: "Tell the team the build is ready", waves: true)
@@ -432,9 +442,9 @@ struct OGCard: View {
                     Spacer()
                     Text("plynn.app")
                         .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.black)
                         .padding(.horizontal, 24).padding(.vertical, 12)
-                        .background(Color(red: 0.12, green: 0.12, blue: 0.12), in: Capsule())
+                        .background(Color(white: 0.96), in: Capsule())
                 }
             }
             .padding(56)
