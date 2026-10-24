@@ -2,7 +2,9 @@ import AppKit
 import Carbon.HIToolbox
 
 public enum Paster {
-    /// Saves the clipboard string, pastes `text` via synthetic Cmd-V, restores after 0.3 s.
+    /// Saves the clipboard string, pastes `text` via synthetic Cmd-V, restores after 1 s.
+    /// A busy browser on Intel can take longer than 0.3 s to read the
+    /// pasteboard, and restoring first pastes the old clipboard instead.
     public static func paste(_ text: String) {
         let pb = NSPasteboard.general
         let saved = pb.string(forType: .string)
@@ -16,7 +18,7 @@ public enum Paster {
         // Give the pasteboard server a beat before synthesizing Cmd-V (VoiceInk uses 0.1 s).
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             postCmdV()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 // Only restore if nobody else wrote to the clipboard meanwhile.
                 if pb.changeCount == savedChangeCount + 1, let saved {
                     pb.clearContents()

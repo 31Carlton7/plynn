@@ -33,6 +33,12 @@ public enum Feedback {
         UserDefaults.standard.object(forKey: "haptics") as? Bool ?? true
     }
 
+    /// Start the cue engine at launch; otherwise the first fn press pays for
+    /// it before the mic opens.
+    public static func warmUp() {
+        _ = ChimePlayer.shared.prepared()
+    }
+
     public static func play(_ cue: Cue) {
         if soundEnabled, let chime = chime(for: cue) {
             ChimePlayer.shared.play(chime, id: cue.rawValue)
@@ -133,7 +139,7 @@ private final class ChimePlayer {
 
     /// Lazily wires the graph, and re-starts it if the audio device changed
     /// out from under us (unplugging headphones stops the engine).
-    private func prepared() -> Bool {
+    func prepared() -> Bool {
         if !wired {
             engine.attach(player)
             engine.connect(player, to: engine.mainMixerNode, format: format)

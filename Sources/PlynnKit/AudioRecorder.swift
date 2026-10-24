@@ -70,6 +70,14 @@ public final class AudioRecorder {
 
     public init() {}
 
+    /// Load the CoreAudio input plug-ins without starting capture (no mic
+    /// indicator), so the first press doesn't lose ~0.5 s of speech to setup.
+    public static func warmUp() {
+        let engine = AVAudioEngine()
+        _ = engine.inputNode.outputFormat(forBus: 0)
+        engine.prepare()
+    }
+
     public func start() throws {
         samples.removeAll(keepingCapacity: true)
         try armAndStart()

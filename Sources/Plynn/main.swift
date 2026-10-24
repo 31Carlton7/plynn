@@ -27,6 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var lastCaptureSeconds = 0.0
     /// Non-nil when the session began with text selected → command mode.
     var pendingSelection: String?
+    /// Command mode needs a polish model. Without one, a selection would
+    /// swallow the dictation, so dictate over it instead.
+    var commandModeAvailable = false
 
     // Meeting mode
     var meetingRecorder: MeetingRecorder?
@@ -76,14 +79,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Audio setup on a cold Intel Mac costs ~0.5 s; pay it now, not on the
+        // first fn press.
+        Feedback.warmUp()
+        DispatchQueue.global(qos: .userInitiated).async { AudioRecorder.warmUp() }
+
         // Warm the active engine, then the polish LLM (serialized — don't
         // compete for download bandwidth or memory pressure at launch).
         Task { [engineManager, formatter] in
-            try? await engineManager.engineForNewSession().start()
+            await engineManager.apple.warmUp()
             NSLog("plynn: engine warm; RSS %.0f MB", Metrics.residentMB())
             await formatter.warmLLM()
+            let polish = await formatter.polishEngine
+            await MainActor.run { self.commandModeAvailable = polish != nil }
             NSLog("plynn: polish engine %@; RSS %.0f MB",
-                  await formatter.polishEngine ?? "none (rules only)", Metrics.residentMB())
+                  polish ?? "none (rules only)", Metrics.residentMB())
             if let reason = await formatter.appleFMStatus {
                 NSLog("plynn: polish %@", reason)
             }
@@ -128,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // paste). The .done check state hides itself on a timer instead.
         if session.state == .idle, recorder == nil,
             model.phase != .secure, model.phase != .done, model.phase != .micUnavailable,
-            model.phase != .meetingSaved {
+            model.phase != .nothingHeard, model.phase != .meetingSaved {
             panel.hide()
         }
         refreshStatusIcon()
@@ -146,14 +156,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.resetLevels()
             panel.show()
 
-            pendingSelection = SelectionReader.selectedText()
+            if commandModeAvailable {
+                pendingSelection = SelectionReader.selectedText()
+            } else {
+                pendingSelection = nil
+            }
 
             let (stream, continuation) = AsyncStream.makeStream(of: [Float].self)
             chunkContinuation = continuation
             let engine = engineManager.engineForNewSession()
             sessionEngine = engine
             feedTask = Task {
-                try? await engine.start()
+                do { try await engine.start() } catch {
+                    NSLog("plynn: speech engine failed to start: %@", "\(error)")
+                }
                 await engine.setPartialCallback { [weak self] text in
                     Task { @MainActor in self?.model.partial = text }
                 }
@@ -245,6 +261,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if result.text != result.verbatim {
                         NSLog("plynn: verbatim — %@", result.verbatim)
                     }
+                    if result.text.isEmpty {
+                        NSLog("plynn: nothing recognized in %.1fs of audio", self.lastCaptureSeconds)
+                        self.showNothingHeard()
+                    }
                     if !result.text.isEmpty {
                         try? self.store?.record(
                             app: bundleID ?? "unknown",
@@ -259,6 +279,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .discardRecording:
             pendingSelection = nil
             let discarded = recorder?.stop() ?? []
+            NSLog("plynn: discarded %.1fs (tap under 0.25 s, another key pressed, Esc, or secure field)",
+                  Double(discarded.count) / 16_000)
+            let abandoned = sessionEngine
+            Task { await abandoned?.cancel() }
             // Stay silent for the sub-minHold taps that also discard — including
             // the first half of a hands-free double-tap, where a cancel cue
             // immediately before the lock cue would just sound like a stutter.
@@ -513,6 +537,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(
             title: "Quit Plynn", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+
+    func showNothingHeard() {
+        Feedback.play(.failure)
+        model.phase = .nothingHeard
+        panel.show()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
+            guard let self, self.model.phase == .nothingHeard else { return }
+            self.panel.hide()
+        }
     }
 
     /// Drag the session back to `.idle` if a transcript never arrives, so one

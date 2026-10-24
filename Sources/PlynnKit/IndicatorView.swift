@@ -86,7 +86,7 @@ struct IndicatorView: View {
         case .recording, .meeting: return 1
         // Off while polishing — the near-still wave reads as a smudge under
         // the glass rather than motion.
-        case .transcribing, .done, .secure, .micUnavailable, .meetingSaved: return 0
+        case .transcribing, .done, .secure, .micUnavailable, .nothingHeard, .meetingSaved: return 0
         }
     }
 
@@ -125,6 +125,17 @@ struct IndicatorView: View {
                 Image(systemName: "mic.slash.fill")
                     .foregroundStyle(.white.opacity(0.9))
                 Text("Microphone in use by another app")
+                    .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(.horizontal, IndicatorMetrics.inset)
+        case .nothingHeard:
+            HStack(spacing: 6) {
+                Image(systemName: "ear.trianglebadge.exclamationmark")
+                    .foregroundStyle(.white.opacity(0.9))
+                Text("Didn't catch that — try again")
                     .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(1)

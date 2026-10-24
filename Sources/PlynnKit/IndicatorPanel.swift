@@ -12,6 +12,8 @@ public final class IndicatorModel {
         case secure
         /// The mic couldn't be opened (another app holds a reconfiguring device).
         case micUnavailable
+        /// The session ended with no recognized words, so nothing was pasted.
+        case nothingHeard
         /// A meeting is being recorded; `elapsed` is whole seconds so far.
         case meeting(elapsed: Int)
         /// Meeting ended, transcript saved, notes being written in the background.

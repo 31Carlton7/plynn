@@ -14,38 +14,62 @@ public actor AppleSpeechEngine: DictationEngine {
 
     public nonisolated let displayName = "Apple (built-in)"
 
+    /// Segments of a still-open utterance carry a placeholder duration (~0.01 s).
+    private static let openSegmentDuration: TimeInterval = 0.05
+    /// Serial, so results reach the event stream in the order they were produced.
+    private static let callbackQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
+
+    private struct Event: Sendable {
+        var text: String?
+        var segmentCount = 0
+        var closed = false
+        var isFinal = false
+        var errorDomain: String?
+        var errorCode = 0
+    }
+
     private var recognizer: SFSpeechRecognizer?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
-    private var accumulated = ""
-    private var latestHypothesis = ""
+    /// Result streams still open, by generation. A stream closes when its
+    /// task delivers a final result or error.
+    private var sinks: [Int: AsyncStream<Event>.Continuation] = [:]
+    /// Bumped per request; results from an older request are ignored, so a
+    /// cancelled session can never end or overwrite the current one.
+    private var generation = 0
+    private var transcript = UtteranceAccumulator()
     private var finished = false
-    private var lastError: Error?
+    private var lastError: (domain: String, code: Int)?
     private var partialCallback: (@Sendable (String) -> Void)?
 
     public init() {}
 
+    /// Authorize and load the recognizer ahead of the first dictation.
+    public func warmUp() async {
+        do { _ = try await preparedRecognizer() } catch {
+            NSLog("plynn: speech warm-up failed: %@", "\(error)")
+        }
+    }
+
     public func start() async throws {
-        await teardown()
-        accumulated = ""
-        latestHypothesis = ""
+        teardown()
+        generation += 1
+        let gen = generation
+        transcript = UtteranceAccumulator()
         finished = false
         lastError = nil
 
-        let status = await Self.requestAuthorization()
-        guard status == .authorized else { throw EngineError.notAuthorized }
-
-        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en_US"))
-        guard let recognizer, recognizer.isAvailable else {
-            throw EngineError.recognizerUnavailable
-        }
-        // Prefer the on-device model. If it is not installed, recognition
-        // fails locally rather than uploading audio to Apple.
-        if !recognizer.supportsOnDeviceRecognition {
-            NSLog("plynn: on-device speech model missing — enable Dictation in System Settings")
-        }
-        self.recognizer = recognizer
-        try beginRequest()
+        // The on-device service fails a new request with "no speech" (1110)
+        // if the previous one is still shutting down, so let it finish.
+        await drainPreviousTasks()
+        let recognizer = try await preparedRecognizer()
+        // A newer session started (or this one was discarded) while we waited.
+        guard gen == generation, !Task.isCancelled else { return }
+        beginRequest(on: recognizer, generation: gen)
     }
 
     public func setPartialCallback(_ callback: @escaping @Sendable (String) -> Void) {
@@ -65,94 +89,146 @@ public actor AppleSpeechEngine: DictationEngine {
     }
 
     public func finish() async throws -> String {
-        guard request != nil else { throw EngineError.notStarted }
-        request?.endAudio()
+        guard let request else { throw EngineError.notStarted }
+        let gen = generation
+        request.endAudio()
 
-        let deadline = ContinuousClock.now + .seconds(12)
-        while !finished, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(40))
+        // The last word only arrives in the final result, so wait for it.
+        var text = transcript.text
+        let deadline = ContinuousClock.now + .seconds(8)
+        while !finished, gen == generation, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(30))
+            if gen == generation { text = transcript.text }
         }
-        let text = displayText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard gen == generation else { return Self.trimmed(text) }
+        if !finished { NSLog("plynn: speech final result timed out") }
+
+        text = transcript.text
         let error = lastError
-        await teardown()
-        if text.isEmpty, let error, Self.isAssetError(error) {
-            throw EngineError.assetUnavailable
+        teardown()
+        let result = Self.trimmed(text)
+        if result.isEmpty, let error {
+            if Self.isAssetError(domain: error.domain, code: error.code) {
+                throw EngineError.assetUnavailable
+            }
         }
-        return text
+        return result
     }
 
-    private var displayText: String {
-        let hypothesis = latestHypothesis.trimmingCharacters(in: .whitespacesAndNewlines)
-        if accumulated.isEmpty { return hypothesis }
-        if hypothesis.isEmpty { return accumulated }
-        return accumulated + " " + hypothesis
+    /// Abandon the current session without waiting for a result.
+    public func cancel() {
+        teardown()
     }
 
-    private func beginRequest() throws {
-        guard let recognizer else { throw EngineError.notStarted }
+    private func preparedRecognizer() async throws -> SFSpeechRecognizer {
+        if let recognizer, recognizer.isAvailable { return recognizer }
+        let status = await Self.requestAuthorization()
+        guard status == .authorized else { throw EngineError.notAuthorized }
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en_US")),
+            recognizer.isAvailable
+        else { throw EngineError.recognizerUnavailable }
+        // Prefer the on-device model. If it is not installed, recognition
+        // fails locally rather than uploading audio to Apple.
+        if !recognizer.supportsOnDeviceRecognition {
+            NSLog("plynn: on-device speech model missing — enable Dictation in System Settings")
+        }
+        recognizer.queue = Self.callbackQueue
+        self.recognizer = recognizer
+        return recognizer
+    }
+
+    private func beginRequest(on recognizer: SFSpeechRecognizer, generation gen: Int) {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = true
         request.addsPunctuation = true
         request.taskHint = .dictation
         self.request = request
-        finished = false
-        latestHypothesis = ""
 
-        task = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            let text = result?.bestTranscription.formattedString
-            let isFinal = result?.isFinal ?? false
-            let nsError = error as NSError?
-            guard let engine = self else { return }
-            Task { await engine.handle(text: text, isFinal: isFinal, error: nsError) }
-        }
-    }
-
-    private func handle(text: String?, isFinal: Bool, error: NSError?) {
-        if let text {
-            latestHypothesis = text
-            if isFinal {
-                if !accumulated.isEmpty, !latestHypothesis.isEmpty {
-                    accumulated += " " + latestHypothesis
-                } else if accumulated.isEmpty {
-                    accumulated = latestHypothesis
-                }
-                latestHypothesis = ""
-                finished = true
+        let (events, sink) = AsyncStream.makeStream(of: Event.self)
+        sinks[gen] = sink
+        task = recognizer.recognitionTask(with: request) { result, error in
+            var event = Event()
+            if let result {
+                let segments = result.bestTranscription.segments
+                event.text = result.bestTranscription.formattedString
+                event.segmentCount = segments.count
+                event.closed = (segments.last?.duration ?? 0) > Self.openSegmentDuration
+                event.isFinal = result.isFinal
             }
-            partialCallback?(displayText)
+            if let error {
+                let ns = error as NSError
+                event.errorDomain = ns.domain
+                event.errorCode = ns.code
+            }
+            sink.yield(event)
+            if event.isFinal || error != nil { sink.finish() }
         }
-        if let error {
-            lastError = error
-            finished = true
+        Task {
+            for await event in events {
+                self.handle(event, generation: gen)
+            }
+            self.sinks[gen] = nil
         }
     }
 
-    private func teardown() async {
+    private func drainPreviousTasks() async {
+        guard !sinks.isEmpty else { return }
+        let started = ContinuousClock.now
+        let deadline = started + .milliseconds(1500)
+        while !sinks.isEmpty, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        if sinks.isEmpty {
+            NSLog("plynn: previous speech task ended after %@", "\(started.duration(to: .now))")
+        } else {
+            NSLog("plynn: previous speech task did not end; starting anyway")
+            for sink in sinks.values { sink.finish() }
+            sinks.removeAll()
+        }
+    }
+
+    private func handle(_ event: Event, generation gen: Int) {
+        guard gen == generation else { return }
+        if let text = event.text {
+            transcript.update(
+                text: text, segmentCount: event.segmentCount,
+                closed: event.closed, isFinal: event.isFinal)
+            partialCallback?(transcript.text)
+        }
+        if event.isFinal { finished = true }
+        if let domain = event.errorDomain {
+            lastError = (domain, event.errorCode)
+            finished = true
+            NSLog("plynn: speech error %@ %ld", domain, event.errorCode)
+        }
+    }
+
+    private func teardown() {
+        request?.endAudio()
         task?.cancel()
         task = nil
         request = nil
-        recognizer = nil
         finished = true
     }
 
-    private static func isAssetError(_ error: Error) -> Bool {
-        let ns = error as NSError
+    private static func trimmed(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isAssetError(domain: String, code: Int) -> Bool {
         // Speech / assistant errors when the on-device locale pack is missing.
-        return ns.domain == "kAFAssistantErrorDomain" || ns.code == 203 || ns.code == 1700
+        domain == "kAFAssistantErrorDomain" && (code == 203 || code == 1700)
     }
 
     private static func requestAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
-                let current = SFSpeechRecognizer.authorizationStatus()
-                if current != .notDetermined {
-                    continuation.resume(returning: current)
-                    return
-                }
-                SFSpeechRecognizer.requestAuthorization { status in
-                    continuation.resume(returning: status)
-                }
+        let current = SFSpeechRecognizer.authorizationStatus()
+        if current != .notDetermined { return current }
+        // The callback runs on a background queue; it must not be inferred
+        // main-actor isolated or the runtime traps when it fires.
+        return await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { @Sendable status in
+                continuation.resume(returning: status)
             }
         }
     }

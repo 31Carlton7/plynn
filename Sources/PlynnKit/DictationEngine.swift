@@ -11,4 +11,6 @@ public protocol DictationEngine: Actor {
     func append(samples: [Float]) async throws
     /// Final transcript — empty string when nothing usable was said.
     func finish() async throws -> String
+    /// Drop the session without producing a transcript.
+    func cancel() async
 }

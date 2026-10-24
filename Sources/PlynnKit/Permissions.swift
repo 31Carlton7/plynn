@@ -26,12 +26,14 @@ public enum Permissions {
             && defaults?.object(forKey: "AppleFnUsageType") != nil
     }
 
+    // The callbacks arrive on a background queue. Without @Sendable they
+    // inherit this type's @MainActor isolation and trap when they run.
     public static func requestMic() {
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        AVCaptureDevice.requestAccess(for: .audio) { @Sendable _ in }
     }
 
     public static func requestSpeech() {
-        SFSpeechRecognizer.requestAuthorization { _ in }
+        SFSpeechRecognizer.requestAuthorization { @Sendable _ in }
     }
 
     /// Shows the system Accessibility prompt (once per TCC state).
