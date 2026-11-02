@@ -56,7 +56,7 @@ struct IndicatorView: View {
             // Clear glass under a dark tint: smoked glass with the backdrop
             // still showing through. Regular glass turns light grey over a
             // white page, which leaves the white text and wave with no contrast.
-            .glassEffect(.clear.tint(.black.opacity(0.55)).interactive(), in: .capsule)
+            .glassEffect(.clear.tint(.black.opacity(0.45)).interactive(), in: .capsule)
             .glassEffectID("capsule", in: glassNS)
             // A hairline so the edge still reads over a dark window.
             .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
