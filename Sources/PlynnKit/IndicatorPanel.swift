@@ -24,11 +24,6 @@ public final class IndicatorModel {
     /// True only while the panel is on screen. The waveform uses this to
     /// avoid running a TimelineView behind a hidden panel.
     public fileprivate(set) var isVisible = false
-    /// Number of envelope points held across the width of the waveform.
-    public static let levelHistory = 56
-    /// Recent loudness, oldest first. The wave is drawn from this, so what you
-    /// said a moment ago travels leftward as you keep talking.
-    public private(set) var levels = [Float](repeating: 0, count: levelHistory)
     /// Smoothed peak — fast attack, quick release.
     public private(set) var level: Float = 0
     public var partial: String = ""
@@ -37,22 +32,15 @@ public final class IndicatorModel {
 
     public init() {}
 
-    /// Append envelope points, dropping the oldest to keep the window fixed.
+    /// Fold in the envelope points from one audio buffer.
     public func push(levels points: [Float]) {
         guard !points.isEmpty else { return }
-        var next = levels
-        next.append(contentsOf: points)
-        if next.count > Self.levelHistory {
-            next.removeFirst(next.count - Self.levelHistory)
-        }
-        levels = next
         // Snap up to a new peak, ease down from an old one — a meter that
         // decays as slowly as it rises reads as sluggish.
-        level = max(points.max() ?? 0, level * 0.78)
+        level = max(points.max() ?? 0, level * 0.45)
     }
 
     public func resetLevels() {
-        levels = [Float](repeating: 0, count: Self.levelHistory)
         level = 0
     }
 }

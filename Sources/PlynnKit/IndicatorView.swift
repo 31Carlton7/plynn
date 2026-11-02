@@ -10,7 +10,7 @@ enum IndicatorMetrics {
     /// Height of the waveform band at the capsule floor. Tall relative to the
     /// capsule on purpose — the upward-dissolve mask keeps the crests from
     /// fighting the transcript that sits over them.
-    static let waveHeight: CGFloat = 22
+    static let waveHeight: CGFloat = 24
     static let textSize: CGFloat = 11
     /// Scrolling-transcript viewport; the rest is breathing room.
     static let textWidth: CGFloat = 122
@@ -40,7 +40,7 @@ struct IndicatorView: View {
                 if showsWave {
                     VStack(spacing: 0) {
                         Spacer(minLength: 0)
-                        BottomWave(levels: model.levels)
+                        BottomWave(level: model.level)
                             .frame(height: IndicatorMetrics.waveHeight)
                     }
                 }
@@ -278,89 +278,79 @@ private struct ScrollingPartial: View {
 ///
 /// The texture comes from `max(0, wave)`: clamping the trough half of each
 /// sine leaves crests scalloping up off a flat baseline rather than a
-/// continuous ripple, and five of those at non-harmonic frequencies overlap
-/// into translucent hills that never repeat. Amplitude is per-column, driven
-/// by the recent-loudness history, so the hills are tall where you were loud
-/// and low where you were quiet — the shape of the phrase, travelling left.
+/// continuous ripple, and layers at non-harmonic frequencies overlap into
+/// translucent hills that never repeat.
+///
+/// Every layer springs toward the current loudness, the front one fastest, so
+/// the hills swell together when you start talking and settle back in depth
+/// order when you stop.
 private struct BottomWave: View {
-    /// Recent loudness, oldest first.
-    let levels: [Float]
+    /// Smoothed loudness, 0…1.
+    let level: Float
+    @State private var motion = WaveMotion()
 
-    private struct Layer {
+    struct Layer {
         let frequency: Double
         let speed: Double
         let ampScale: Double
         let baseHeight: Double
         let opacity: Double
+        /// Spring stiffness, as natural frequency in rad/s, while the voice
+        /// rises and while it falls. Falling is slower so the hills ease down
+        /// between words instead of collapsing.
+        let attack: Double
+        let release: Double
     }
 
     /// Frequencies are deliberately non-harmonic — harmonically related ones
     /// line their crests up into a visibly repeating pattern.
-    private static let layers: [Layer] = [
-        .init(frequency: 1.3, speed: 1.4, ampScale: 1.00, baseHeight: 3.4, opacity: 0.40),
-        .init(frequency: 2.1, speed: -1.05, ampScale: 0.82, baseHeight: 2.7, opacity: 0.31),
-        .init(frequency: 3.4, speed: 2.0, ampScale: 0.60, baseHeight: 2.0, opacity: 0.23),
-        .init(frequency: 5.3, speed: -2.7, ampScale: 0.40, baseHeight: 1.3, opacity: 0.15),
-        .init(frequency: 7.7, speed: 3.3, ampScale: 0.26, baseHeight: 0.8, opacity: 0.10),
+    static let layers: [Layer] = [
+        .init(frequency: 1.3, speed: 1.4, ampScale: 1.00, baseHeight: 1.6, opacity: 0.34,
+              attack: 60, release: 28),
+        .init(frequency: 2.1, speed: -1.05, ampScale: 0.80, baseHeight: 1.2, opacity: 0.24,
+              attack: 48, release: 23),
+        .init(frequency: 3.4, speed: 2.0, ampScale: 0.58, baseHeight: 0.8, opacity: 0.17,
+              attack: 38, release: 19),
+        .init(frequency: 5.3, speed: -2.7, ampScale: 0.38, baseHeight: 0.5, opacity: 0.11,
+              attack: 30, release: 15),
     ]
-
-    /// Loudness across the band, interpolated between stored points so the
-    /// hills stay smooth instead of stepping at each new sample.
-    private func envelope(at progress: Double) -> Double {
-        guard levels.count > 1 else { return 0 }
-        let position = progress * Double(levels.count - 1)
-        let index = min(Int(position), levels.count - 2)
-        let fraction = position - Double(index)
-        return Double(levels[index]) * (1 - fraction)
-            + Double(levels[index + 1]) * fraction
-    }
 
     var body: some View {
         TimelineView(.animation) { timeline in
+            let states = motion.advance(to: timeline.date, level: Double(level))
             Canvas { ctx, size in
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                // Ripples run faster while you are actually talking.
-                let loudness = Double(levels.suffix(5).max() ?? 0)
-
-                for (index, layer) in Self.layers.enumerated() {
+                // Back to front, so the front hill and its crest sit on top.
+                for (index, (layer, state)) in zip(Self.layers, states).enumerated().reversed() {
+                    let heights = Self.heights(of: layer, state, maxHeight: size.height)
+                    let step = size.width / Double(heights.count - 1)
                     var fill = Path()
-                    var crest = Path()
-                    let base = layer.baseHeight
                     fill.move(to: CGPoint(x: 0, y: size.height))
-                    let steps = 160
-                    for i in 0...steps {
-                        let progress = Double(i) / Double(steps)
-                        let x = size.width * progress
-                        // Never fully flat, so the surface still lives in silence.
-                        let drive: Double = max(0.10, envelope(at: progress))
-                        // Higher floor than the original 0.10: the hills keep
-                        // real body at conversational volume instead of only
-                        // standing up when you get loud.
-                        let amp: Double = (size.height - base) * layer.ampScale
-                            * (0.22 + 0.78 * drive)
-                        // Speeds up with loudness, but gently — a big swing here
-                        // is what reads as "frantic" rather than "alive".
-                        let speed: Double = layer.speed * (1 + loudness * 0.4)
-                        let phaseA: Double = progress * layer.frequency * 2 * .pi + t * speed
-                        let phaseB: Double =
-                            progress * layer.frequency * 3.7 * .pi - t * speed * 0.6
-                        let wave: Double = sin(phaseA) * 0.7 + sin(phaseB) * 0.3
-                        let y: Double = size.height - base - max(0, wave) * amp
-                        fill.addLine(to: CGPoint(x: x, y: y))
-                        if i == 0 { crest.move(to: CGPoint(x: x, y: y)) }
-                        else { crest.addLine(to: CGPoint(x: x, y: y)) }
+                    for (i, h) in heights.enumerated() {
+                        fill.addLine(to: CGPoint(x: Double(i) * step, y: size.height - h))
                     }
                     fill.addLine(to: CGPoint(x: size.width, y: size.height))
                     fill.closeSubpath()
                     ctx.fill(fill, with: .color(.white.opacity(layer.opacity)))
-                    // Bright crest on the front hill keeps the wave legible
-                    // even over a light background.
-                    if index == 0 {
-                        ctx.stroke(
-                            crest,
-                            with: .color(.white.opacity(0.50 + 0.22 * loudness)),
-                            style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
+
+                    guard index == 0 else { continue }
+                    // Bright crest on the front hill keeps the wave legible over
+                    // any backdrop. Only over the raised parts: run along the
+                    // flat floor too and it reads as a white rule under the pill.
+                    var crest = Path()
+                    var drawing = false
+                    for (i, h) in heights.enumerated() {
+                        let point = CGPoint(x: Double(i) * step, y: size.height - h)
+                        if h - layer.baseHeight > 0.4 {
+                            if drawing { crest.addLine(to: point) } else { crest.move(to: point) }
+                            drawing = true
+                        } else {
+                            drawing = false
+                        }
                     }
+                    ctx.stroke(
+                        crest,
+                        with: .color(.white.opacity(0.4 + 0.3 * state.amplitude)),
+                        style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round))
                 }
             }
         }
@@ -369,10 +359,68 @@ private struct BottomWave: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0),
-                    .init(color: .white.opacity(0.7), location: 0.55),
+                    .init(color: .white.opacity(0.85), location: 0.45),
                     .init(color: .white, location: 1),
                 ],
                 startPoint: .top, endPoint: .bottom))
+    }
+
+    /// Height of one layer above the capsule floor, sampled across the width.
+    private static func heights(
+        of layer: Layer, _ state: WaveMotion.State, maxHeight: Double
+    ) -> [Double] {
+        // Never fully flat, so the surface still lives in silence.
+        let drive = 0.1 + 0.9 * max(0, state.amplitude)
+        let amp = (maxHeight - layer.baseHeight) * layer.ampScale * drive
+        let steps = 120
+        return (0...steps).map { i in
+            let progress = Double(i) / Double(steps)
+            // Taper into the capsule's rounded ends rather than being cut by them.
+            let edge = min(progress, 1 - progress)
+            let taper = edge < 0.16 ? sin(edge / 0.16 * .pi / 2) : 1
+            let phaseA = progress * layer.frequency * 2 * .pi + state.phase
+            let phaseB = progress * layer.frequency * 3.7 * .pi - state.phase * 0.6
+            let wave = sin(phaseA) * 0.7 + sin(phaseB) * 0.3
+            return layer.baseHeight + max(0, wave) * amp * taper
+        }
+    }
+}
+
+/// The wave's running state, stepped once per frame. Phase is integrated
+/// rather than computed as `time × speed`: with time counted in seconds since
+/// 2001, any change in speed would jump every layer to an unrelated phase.
+@MainActor
+private final class WaveMotion {
+    struct State {
+        var amplitude = 0.0
+        var velocity = 0.0
+        var phase = 0.0
+    }
+
+    private var states = [State](repeating: State(), count: BottomWave.layers.count)
+    private var lastFrame: Date?
+
+    func advance(to now: Date, level: Double) -> [State] {
+        // A frame after a stall (panel just shown, app busy) steps as one
+        // normal frame instead of flinging the springs.
+        let dt = min(max(now.timeIntervalSince(lastFrame ?? now), 0), 1.0 / 30)
+        lastFrame = now
+        for (i, layer) in BottomWave.layers.enumerated() {
+            var s = states[i]
+            // Below 0.2 is room noise and breath, and ordinary speech peaks
+            // around 0.75. Stretching that span over the full height makes the
+            // hills follow the voice instead of idling half-raised.
+            let target = min(max((level - 0.2) / 0.55, 0), 1)
+            let omega = target > s.amplitude ? layer.attack : layer.release
+            // Underdamped, so each swell overshoots a touch before it settles.
+            let acceleration = omega * omega * (target - s.amplitude) - 2 * 0.62 * omega * s.velocity
+            s.velocity += acceleration * dt
+            s.amplitude += s.velocity * dt
+            // Ripples run a little faster while you are actually talking.
+            s.phase += layer.speed * (1 + 0.9 * max(0, s.amplitude)) * dt
+            states[i] = s
+        }
+        return states
     }
 }
 

@@ -51,25 +51,18 @@ final class AudioLevelTests: XCTestCase {
         XCTAssertEqual(AudioLevel.normalized(rms: 0.000001), 0)
     }
 
-    func testModelKeepsHistoryWindowFixed() async {
+    func testModelLevelAttacksFastAndReleasesGradually() async {
         await MainActor.run {
             let model = IndicatorModel()
-            XCTAssertEqual(model.levels.count, IndicatorModel.levelHistory)
+            model.push(levels: [0.2, 0.9, 0.4])
+            XCTAssertEqual(model.level, 0.9, "a new peak shows at once")
 
-            model.push(levels: [Float](repeating: 0.9, count: 200))
-            XCTAssertEqual(
-                model.levels.count, IndicatorModel.levelHistory,
-                "history must stay bounded however many points arrive")
-            XCTAssertEqual(model.levels.last, 0.9)
-
-            // Fast attack, quick release.
             model.push(levels: [0])
             XCTAssertLessThan(model.level, 0.9)
             XCTAssertGreaterThan(model.level, 0, "release should decay, not cut out")
 
             model.resetLevels()
             XCTAssertEqual(model.level, 0)
-            XCTAssertTrue(model.levels.allSatisfy { $0 == 0 })
         }
     }
 }
