@@ -45,37 +45,37 @@ struct IndicatorView: View {
                     }
                 }
 
+                // A plain crossfade showed both phases' text over each other.
                 centerContent
+                    .transition(.blurReplace)
             }
             .frame(
                 width: isCompact ? IndicatorMetrics.compactWidth : IndicatorMetrics.width,
                 height: IndicatorMetrics.height)
             .clipShape(Capsule())
-            .glassEffect(.regular.tint(.black.opacity(0.18)).interactive(), in: .capsule)
+            // Clear glass under a dark tint: smoked glass with the backdrop
+            // still showing through. Regular glass turns light grey over a
+            // white page, which leaves the white text and wave with no contrast.
+            .glassEffect(.clear.tint(.black.opacity(0.55)).interactive(), in: .capsule)
             .glassEffectID("capsule", in: glassNS)
-            // Explicit glass character — a bright rim light along the top edge
-            // and a soft specular sheen, visible on any background.
-            .overlay(
-                Capsule().strokeBorder(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.5), location: 0),
-                            .init(color: .white.opacity(0.06), location: 0.35),
-                            .init(color: .white.opacity(0.18), location: 1),
-                        ],
-                        startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1))
-            .overlay(
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [.white.opacity(0.10), .clear],
-                            startPoint: .top, endPoint: .center))
-                    .allowsHitTesting(false))
+            // A hairline so the edge still reads over a dark window.
+            .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
         }
         .contentShape(Capsule())
         .onTapGesture { model.onTap?() }
-        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: model.phase)
+        // Only morph between phases on screen. A fresh show starts in its new
+        // phase instead of unfolding from the check mark it was hidden on.
+        .animation(
+            model.isPresented ? .spring(response: 0.38, dampingFraction: 0.82) : nil,
+            value: model.phase)
+        .scaleEffect(model.isPresented ? 1 : 0.9, anchor: .bottom)
+        .offset(y: model.isPresented ? 0 : 6)
+        .opacity(model.isPresented ? 1 : 0)
+        .animation(
+            model.isPresented
+                ? .spring(response: 0.36, dampingFraction: 0.72)
+                : .easeIn(duration: IndicatorPanel.exitDuration),
+            value: model.isPresented)
         // Fixed-width center-aligned stage: the capsule collapses toward its
         // own center instead of snapping to the panel's leading edge.
         .frame(
@@ -109,7 +109,6 @@ struct IndicatorView: View {
             .padding(.horizontal, IndicatorMetrics.inset)
         case .transcribing:
             PolishingLabel()
-                .transition(.opacity)
         case .done:
             AnimatedCheckmark()
         case .secure:
@@ -160,6 +159,8 @@ struct IndicatorView: View {
                 Text("Recording meeting")
                     .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Text(Self.clock(elapsed))
                     .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
                     .monospacedDigit()
@@ -246,6 +247,9 @@ private struct ScrollingPartial: View {
                     .font(.system(size: IndicatorMetrics.textSize, weight: .medium, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
+                    // The default crossfade drew the old line and the new one
+                    // over each other; swap in place and let the position animate.
+                    .contentTransition(.identity)
                     .fixedSize(horizontal: true, vertical: false)
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) {
                         textWidth = $0

@@ -24,6 +24,8 @@ public final class IndicatorModel {
     /// True only while the panel is on screen. The waveform uses this to
     /// avoid running a TimelineView behind a hidden panel.
     public fileprivate(set) var isVisible = false
+    /// True from `show()` until `hide()` starts the exit animation.
+    public fileprivate(set) var isPresented = false
     /// Smoothed peak — fast attack, quick release.
     public private(set) var level: Float = 0
     public var partial: String = ""
@@ -74,15 +76,34 @@ public final class IndicatorPanel: NSPanel {
     public override var canBecomeKey: Bool { false }
     public override var canBecomeMain: Bool { false }
 
+    static let exitDuration = 0.16
+    /// Bumped by every show and hide, so a hide's delayed orderOut can tell
+    /// the panel was shown again while it waited.
+    private var generation = 0
+
     public func show() {
+        generation += 1
         model.isVisible = true
         positionBottomCenter()
         orderFrontRegardless()
+        if !model.isPresented {
+            // Render the phase the caller just set before the entrance starts,
+            // so that change lands unanimated.
+            contentView?.layoutSubtreeIfNeeded()
+        }
+        model.isPresented = true
     }
 
     public func hide() {
-        model.isVisible = false
-        orderOut(nil)
+        guard model.isPresented else { return }
+        model.isPresented = false
+        generation += 1
+        let hiding = generation
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.exitDuration) { [weak self] in
+            guard let self, self.generation == hiding else { return }
+            self.model.isVisible = false
+            self.orderOut(nil)
+        }
     }
 
     private func positionBottomCenter() {
