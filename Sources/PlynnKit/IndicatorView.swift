@@ -306,13 +306,13 @@ private struct BottomWave: View {
     /// line their crests up into a visibly repeating pattern.
     static let layers: [Layer] = [
         .init(frequency: 1.3, speed: 1.4, ampScale: 1.00, baseHeight: 1.6, opacity: 0.34,
-              attack: 30, release: 11),
+              attack: 48, release: 28),
         .init(frequency: 2.1, speed: -1.05, ampScale: 0.80, baseHeight: 1.2, opacity: 0.24,
-              attack: 24, release: 9),
+              attack: 38, release: 23),
         .init(frequency: 3.4, speed: 2.0, ampScale: 0.58, baseHeight: 0.8, opacity: 0.17,
-              attack: 19, release: 7.5),
+              attack: 30, release: 19),
         .init(frequency: 5.3, speed: -2.7, ampScale: 0.38, baseHeight: 0.5, opacity: 0.11,
-              attack: 15, release: 6),
+              attack: 24, release: 15),
     ]
 
     var body: some View {
@@ -370,7 +370,7 @@ private struct BottomWave: View {
         of layer: Layer, _ state: WaveMotion.State, maxHeight: Double
     ) -> [Double] {
         // Never fully flat, so the surface still lives in silence.
-        let drive = 0.16 + 0.84 * max(0, state.amplitude)
+        let drive = 0.1 + 0.9 * max(0, state.amplitude)
         let amp = (maxHeight - layer.baseHeight) * layer.ampScale * drive
         let steps = 120
         return (0...steps).map { i in
@@ -407,13 +407,17 @@ private final class WaveMotion {
         lastFrame = now
         for (i, layer) in BottomWave.layers.enumerated() {
             var s = states[i]
-            let omega = level > s.amplitude ? layer.attack : layer.release
+            // Below 0.2 is room noise and breath, and speech rarely tops 0.9.
+            // Stretching that span over the full height makes the hills follow
+            // the voice instead of idling half-raised.
+            let target = min(max((level - 0.2) / 0.7, 0), 1)
+            let omega = target > s.amplitude ? layer.attack : layer.release
             // Slightly underdamped: a soft overshoot on each swell.
-            let acceleration = omega * omega * (level - s.amplitude) - 2 * 0.78 * omega * s.velocity
+            let acceleration = omega * omega * (target - s.amplitude) - 2 * 0.78 * omega * s.velocity
             s.velocity += acceleration * dt
             s.amplitude += s.velocity * dt
             // Ripples run a little faster while you are actually talking.
-            s.phase += layer.speed * (1 + 0.45 * max(0, s.amplitude)) * dt
+            s.phase += layer.speed * (1 + 0.9 * max(0, s.amplitude)) * dt
             states[i] = s
         }
         return states

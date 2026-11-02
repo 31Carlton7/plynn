@@ -37,7 +37,7 @@ public final class IndicatorModel {
         guard !points.isEmpty else { return }
         // Snap up to a new peak, ease down from an old one — a meter that
         // decays as slowly as it rises reads as sluggish.
-        level = max(points.max() ?? 0, level * 0.78)
+        level = max(points.max() ?? 0, level * 0.45)
     }
 
     public func resetLevels() {
