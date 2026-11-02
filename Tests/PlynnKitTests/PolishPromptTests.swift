@@ -112,7 +112,7 @@ final class PolishPromptTests: XCTestCase {
             - Make sure everything works as intended
             """
         XCTAssertEqual(
-            PolishPrompt.sanitize(leaked, input: input, removeRepeatedTrailingList: true),
+            PolishPrompt.sanitize(leaked, input: input, rejectAddedContent: true),
             input)
     }
 
@@ -120,7 +120,7 @@ final class PolishPromptTests: XCTestCase {
         let body = "Review the changes. Run the tests."
         let leaked = body + "\n\n1. Review the changes\n2. Run the tests"
         XCTAssertEqual(
-            PolishPrompt.sanitize(leaked, input: body, removeRepeatedTrailingList: true),
+            PolishPrompt.sanitize(leaked, input: body, rejectAddedContent: true),
             body)
     }
 
@@ -129,14 +129,14 @@ final class PolishPromptTests: XCTestCase {
         XCTAssertEqual(
             PolishPrompt.sanitize(
                 list, input: "first review the changes second run the tests",
-                removeRepeatedTrailingList: true),
+                rejectAddedContent: true),
             list)
     }
 
     func testKeepsTrailingListWithNewContent() {
         let text = "Here is the plan.\n\n- Review the changes\n- Run the tests"
         XCTAssertEqual(
-            PolishPrompt.sanitize(text, input: text, removeRepeatedTrailingList: true),
+            PolishPrompt.sanitize(text, input: text, rejectAddedContent: true),
             text)
     }
 
@@ -144,6 +144,168 @@ final class PolishPromptTests: XCTestCase {
         let selection = "Review the changes. Run the tests."
         let transformed = selection + "\n\n- Review the changes\n- Run the tests"
         XCTAssertEqual(PolishPrompt.sanitize(transformed, input: selection), transformed)
+    }
+
+    // MARK: sanitize — content the speaker never said
+
+    /// The reported bug: the prose came back intact with a numbered recap
+    /// under it, ending in "Ship on Monday" lifted from the prompt's example.
+    func testRejectsRecapEndingInCopiedPromptExample() {
+        let input = """
+            Yes, I am going to bed, so work to get this brand new version of Realm set up. Ensure there's no bugs, everything looks really clean, is very usable. I am very excited for this. Have the Electron version up and running for me by the time I wake up tomorrow with all the changes, including the bug fixes that we asked for our buddy Johnny.
+            """
+        let leaked = input + """
+
+
+            1. Ensure there's no bugs
+            2. Everything looks really clean
+            3. Everything is very usable
+            4. Have the Electron version up and running for me by the time I wake up tomorrow with all the changes, including the bug fixes that we asked for our buddy Johnny
+            5. Ship on Monday
+            """
+        XCTAssertEqual(
+            PolishPrompt.sanitize(leaked, input: input, rejectAddedContent: true), input)
+    }
+
+    func testRejectsAReplyInsteadOfTheText() {
+        let input = "can you check whether the build passed on main"
+        let reply = "Sure! I can't access your build system, but you could open the CI page to see it."
+        XCTAssertEqual(
+            PolishPrompt.sanitize(reply, input: input, rejectAddedContent: true), input)
+    }
+
+    func testKeepsOrdinaryCleanup() {
+        let input = "um so I think we should uh ship this today you know"
+        let cleaned = "So I think we should ship this today."
+        XCTAssertEqual(
+            PolishPrompt.sanitize(cleaned, input: input, rejectAddedContent: true), cleaned)
+    }
+
+    func testKeepsDictatedListAndRespelledName() {
+        let input = "first email jae second run the tests third don't forget the deck"
+        let cleaned = "1. Email Jay\n2. Run the tests\n3. Don't forget the deck"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(
+                cleaned, input: input, glossary: ["Jay"], rejectAddedContent: true),
+            cleaned)
+    }
+
+    /// Filler removal shrinks the prose about as much as a one-line tail
+    /// adds, so this one gets past the length check.
+    func testStripsOneLineTailUnderShrunkProse() {
+        let input = "So look, we need like an auto updater so we can just redo the build"
+        let body = "We need an auto updater so we can redo the build."
+        XCTAssertEqual(
+            PolishPrompt.sanitize(
+                body + "\n\n- ship on Monday", input: input, rejectAddedContent: true),
+            body)
+    }
+
+    func testStripsNameDumpUnderProse() {
+        let input = "fix the margin or padding because the list bleeds through the gaps"
+        let body = "Fix the margin or padding because the list bleeds through the gaps."
+        XCTAssertEqual(
+            PolishPrompt.sanitize(
+                body + "\n\n- margin\n- padding", input: input, rejectAddedContent: true),
+            body)
+    }
+
+    func testStripsBareTrailingLineOfUnspokenWords() {
+        let input = "just add like a little more spacing above it because it seems crimped there"
+        let body = "Just add a little more spacing above it because it seems crimped there."
+        XCTAssertEqual(
+            PolishPrompt.sanitize(
+                body + "  \nship on Monday", input: input, rejectAddedContent: true),
+            body)
+    }
+
+    func testKeepsDictatedLastLine() {
+        let input = "thanks for the help\nsee you on Monday"
+        let text = "Thanks for the help.\nSee you on Monday."
+        XCTAssertEqual(
+            PolishPrompt.sanitize(text, input: input, rejectAddedContent: true), text)
+    }
+
+    func testKeepsListIntroducedByColon() {
+        let input = "my old classes which is EE451 EE250 and CSCI 350"
+        let text = "My old classes:\n\n- EE451\n- EE250\n- CSCI 350"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(text, input: input, rejectAddedContent: true), text)
+    }
+
+    /// From history: the recap ran straight on from the prose, no blank line,
+    /// with Markdown hard breaks on every line.
+    func testStripsRecapWithNoBlankLineAbove() {
+        let input = "we should text Sam about the permission screenshot and keep it short and then draft a message for the team channel and show me before we send it"
+        let body = "We should text Sam about the permission screenshot and keep it short. Then draft a message for the team channel and show me before we send it."
+        let leaked = body
+            + "  \n- text Sam about the permission screenshot  \n- keep it short  "
+            + "\n- draft a message for the team channel and show me before we send it"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(leaked, input: input, rejectAddedContent: true), body)
+    }
+
+    func testStripsOrdinalLinesRestatingTheProse() {
+        let input = "check the comments in the design file and then read the chat and then let's come up with a plan for all of this"
+        let body = "Check the comments in the design file, then read the chat, and then let's come up with a plan for all of this."
+        let leaked = body + """
+
+
+            First, check the comments in the design file.
+            Second, read the chat.
+            Third, come up with a plan.
+            Fourth, ship on Monday.
+            """
+        XCTAssertEqual(
+            PolishPrompt.sanitize(leaked, input: input, rejectAddedContent: true), body)
+    }
+
+    func testStripsSentenceAppendedOnTheSameLine() {
+        let input = "can we look into ways to cut the memory use but keep them efficient"
+        let body = "Can we look into ways to cut the memory use but keep them efficient?"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(
+                body + " Ship on Monday.", input: input, rejectAddedContent: true),
+            body)
+    }
+
+    /// The model turned the second half of the speech into bullets. Ugly, but
+    /// every word is the speaker's, so none of it may be cut.
+    func testKeepsSpeechTheModelReflowedIntoBullets() {
+        let input = "the register file needs three things what do they mean and is that the stage it is in"
+        let text = "The register file needs three things.\n\n- What do they mean\n- Is that the stage it is in"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(text, input: input, rejectAddedContent: true), text)
+    }
+
+    func testStripsOneWordListItemRepeatingTheProse() {
+        let input = "I want each team to pick a mascot for the dashboard"
+        let body = "I want each team to pick a mascot for the dashboard."
+        XCTAssertEqual(
+            PolishPrompt.sanitize(body + "\n\n1. Mascot", input: input, rejectAddedContent: true),
+            body)
+    }
+
+    func testKeepsNameOnItsOwnClosingLine() {
+        let input = "thanks for the help Jay"
+        let text = "Thanks for the help,\nJay"
+        XCTAssertEqual(
+            PolishPrompt.sanitize(text, input: input, glossary: ["Jay"], rejectAddedContent: true),
+            text)
+    }
+
+    func testKeepsOneRewordedClosingWord() {
+        let input = "send it over when you're done okay"
+        let text = "Send it over when you're done. OK."
+        XCTAssertEqual(
+            PolishPrompt.sanitize(text, input: input, rejectAddedContent: true), text)
+    }
+
+    /// No example sentence in the prompt for a small model to copy.
+    func testPromptHasNoExampleSentenceToCopy() {
+        let p = PolishPrompt.instructions(tone: .neutral, technical: false)
+        XCTAssertFalse(p.lowercased().contains("monday"), "got: \(p)")
+        XCTAssertFalse(p.contains("becomes"), "got: \(p)")
     }
 
     // MARK: existing sanitize behavior still holds
