@@ -10,7 +10,7 @@ enum IndicatorMetrics {
     /// Height of the waveform band at the capsule floor. Tall relative to the
     /// capsule on purpose — the upward-dissolve mask keeps the crests from
     /// fighting the transcript that sits over them.
-    static let waveHeight: CGFloat = 22
+    static let waveHeight: CGFloat = 24
     static let textSize: CGFloat = 11
     /// Scrolling-transcript viewport; the rest is breathing room.
     static let textWidth: CGFloat = 122
@@ -306,13 +306,13 @@ private struct BottomWave: View {
     /// line their crests up into a visibly repeating pattern.
     static let layers: [Layer] = [
         .init(frequency: 1.3, speed: 1.4, ampScale: 1.00, baseHeight: 1.6, opacity: 0.34,
-              attack: 48, release: 28),
+              attack: 60, release: 28),
         .init(frequency: 2.1, speed: -1.05, ampScale: 0.80, baseHeight: 1.2, opacity: 0.24,
-              attack: 38, release: 23),
+              attack: 48, release: 23),
         .init(frequency: 3.4, speed: 2.0, ampScale: 0.58, baseHeight: 0.8, opacity: 0.17,
-              attack: 30, release: 19),
+              attack: 38, release: 19),
         .init(frequency: 5.3, speed: -2.7, ampScale: 0.38, baseHeight: 0.5, opacity: 0.11,
-              attack: 24, release: 15),
+              attack: 30, release: 15),
     ]
 
     var body: some View {
@@ -359,7 +359,7 @@ private struct BottomWave: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0),
-                    .init(color: .white.opacity(0.7), location: 0.55),
+                    .init(color: .white.opacity(0.85), location: 0.45),
                     .init(color: .white, location: 1),
                 ],
                 startPoint: .top, endPoint: .bottom))
@@ -407,13 +407,13 @@ private final class WaveMotion {
         lastFrame = now
         for (i, layer) in BottomWave.layers.enumerated() {
             var s = states[i]
-            // Below 0.2 is room noise and breath, and speech rarely tops 0.9.
-            // Stretching that span over the full height makes the hills follow
-            // the voice instead of idling half-raised.
-            let target = min(max((level - 0.2) / 0.7, 0), 1)
+            // Below 0.2 is room noise and breath, and ordinary speech peaks
+            // around 0.75. Stretching that span over the full height makes the
+            // hills follow the voice instead of idling half-raised.
+            let target = min(max((level - 0.2) / 0.55, 0), 1)
             let omega = target > s.amplitude ? layer.attack : layer.release
-            // Slightly underdamped: a soft overshoot on each swell.
-            let acceleration = omega * omega * (target - s.amplitude) - 2 * 0.78 * omega * s.velocity
+            // Underdamped, so each swell overshoots a touch before it settles.
+            let acceleration = omega * omega * (target - s.amplitude) - 2 * 0.62 * omega * s.velocity
             s.velocity += acceleration * dt
             s.amplitude += s.velocity * dt
             // Ripples run a little faster while you are actually talking.
