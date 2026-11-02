@@ -33,10 +33,15 @@ public actor AppleFMFormatter {
     }
 
     /// One stateless prompt → raw completion (nil on timeout/error/unavailable).
+    /// Greedy, like the Qwen path's temperature 0. With default sampling the
+    /// same dictation came back differently from run to run, once with a
+    /// whole clause dropped.
     public func complete(_ prompt: String) async -> String? {
         guard ready else { return nil }
         return await withTaskTimeout(seconds: 10) {
-            try await LanguageModelSession().respond(to: prompt).content
+            try await LanguageModelSession()
+                .respond(to: prompt, options: GenerationOptions(sampling: .greedy))
+                .content
         }
     }
 
@@ -48,6 +53,6 @@ public actor AppleFMFormatter {
             preferredSpellings: preferredSpellings)
         return PolishPrompt.sanitize(
             await complete(prompt), input: text, glossary: preferredSpellings,
-            removeRepeatedTrailingList: true)
+            rejectAddedContent: true)
     }
 }

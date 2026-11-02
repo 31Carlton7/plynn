@@ -48,7 +48,7 @@ public actor LLMFormatter {
             preferredSpellings: preferredSpellings)
         return PolishPrompt.sanitize(
             await complete(prompt), input: text, glossary: preferredSpellings,
-            removeRepeatedTrailingList: true)
+            rejectAddedContent: true)
     }
 
 }
