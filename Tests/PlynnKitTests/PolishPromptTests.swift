@@ -148,8 +148,8 @@ final class PolishPromptTests: XCTestCase {
 
     // MARK: sanitize — content the speaker never said
 
-    /// The reported bug: the prose came back intact with a numbered recap
-    /// under it, ending in "Ship on Monday" lifted from the prompt's example.
+    /// The prose comes back intact with a numbered recap under it, ending in
+    /// "Ship on Monday" lifted from the old prompt's example.
     func testRejectsRecapEndingInCopiedPromptExample() {
         let input = """
             Yes, I am going to bed, so work to get this brand new version of Realm set up. Ensure there's no bugs, everything looks really clean, is very usable. I am very excited for this. Have the Electron version up and running for me by the time I wake up tomorrow with all the changes, including the bug fixes that we asked for our buddy Johnny.
@@ -233,8 +233,8 @@ final class PolishPromptTests: XCTestCase {
             PolishPrompt.sanitize(text, input: input, rejectAddedContent: true), text)
     }
 
-    /// From history: the recap ran straight on from the prose, no blank line,
-    /// with Markdown hard breaks on every line.
+    /// The recap runs straight on from the prose with no blank line, and a
+    /// Markdown hard break on every line.
     func testStripsRecapWithNoBlankLineAbove() {
         let input = "we should text Sam about the permission screenshot and keep it short and then draft a message for the team channel and show me before we send it"
         let body = "We should text Sam about the permission screenshot and keep it short. Then draft a message for the team channel and show me before we send it."
