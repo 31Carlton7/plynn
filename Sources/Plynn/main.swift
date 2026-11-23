@@ -4,20 +4,16 @@ import Sparkle
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let hotkey = HotkeyMonitor(trigger: AppDelegate.storedHotkeyTrigger())
-
-    static func storedHotkeyTrigger() -> HotkeyTrigger {
-        UserDefaults.standard.string(forKey: "hotkeyTrigger").flatMap(HotkeyTrigger.init) ?? .fn
-    }
+    let hotkey = HotkeyMonitor(shortcuts: HotkeyAction.storedShortcuts())
     let secureWatcher = SecureInputWatcher()
     let engineManager = EngineManager()
     let model = IndicatorModel()
     lazy var panel = IndicatorPanel(model: model)
     lazy var onboarding = OnboardingWindowController(engineManager: engineManager)
-    lazy var mainWindow = MainWindowController(engineManager: engineManager, store: store) {
-        [weak self] in
-        self?.onboarding.show()
-    }
+    lazy var mainWindow = MainWindowController(
+        engineManager: engineManager, store: store,
+        openOnboarding: { [weak self] in self?.onboarding.show() },
+        setHotkeysPaused: { [weak self] paused in self?.hotkey.isPaused = paused })
     var statusItem: NSStatusItem!
     let updater = SPUStandardUpdaterController(
         startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
@@ -69,15 +65,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onboarding.show()
         }
 
-        // Picking a different activation key in Settings takes effect
-        // immediately — no relaunch, since the tap just matches a new keycode.
+        // Recording a new shortcut in Settings takes effect immediately — no
+        // relaunch, since the monitor just swaps what it listens for.
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let stored = AppDelegate.storedHotkeyTrigger()
-                if self.hotkey.trigger != stored { self.hotkey.trigger = stored }
+                let stored = HotkeyAction.storedShortcuts()
+                if self.hotkey.shortcuts != stored { self.hotkey.shortcuts = stored }
             }
         }
 
