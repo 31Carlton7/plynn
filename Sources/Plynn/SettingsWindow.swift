@@ -17,6 +17,7 @@ struct MainView: View {
     @Bindable var engineManager: EngineManager
     let store: PersonalStore?
     let openOnboarding: () -> Void
+    let setHotkeysPaused: (Bool) -> Void
 
     var body: some View {
         TabView(selection: $model.tab) {
@@ -34,7 +35,9 @@ struct MainView: View {
                     .tabItem { Label("Snippets", systemImage: "text.insert") }
                     .tag(MainTab.snippets)
             }
-            SettingsPane(engineManager: engineManager, openOnboarding: openOnboarding)
+            SettingsPane(
+                engineManager: engineManager, openOnboarding: openOnboarding,
+                setHotkeysPaused: setHotkeysPaused)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(MainTab.settings)
         }
@@ -44,7 +47,6 @@ struct MainView: View {
 
 struct SettingsPane: View {
     @Bindable var engineManager: EngineManager
-    @AppStorage("hotkeyTrigger") private var hotkeyTrigger: HotkeyTrigger = .fn
     @AppStorage("aiPolish") private var aiPolish = true
     @AppStorage("learnCorrections") private var learnCorrections = true
     @AppStorage("soundEffects") private var soundEffects = true
@@ -52,6 +54,7 @@ struct SettingsPane: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
     let openOnboarding: () -> Void
+    let setHotkeysPaused: (Bool) -> Void
 
     var body: some View {
         Form {
@@ -64,15 +67,13 @@ struct SettingsPane: View {
                 LabeledContent("Status", value: engineManager.statusLine)
             }
             Section {
-                Picker("Activation key", selection: $hotkeyTrigger) {
-                    ForEach(HotkeyTrigger.allCases) { trigger in
-                        Text(trigger.displayName).tag(trigger)
-                    }
+                ForEach(HotkeyAction.allCases) { action in
+                    ShortcutRecorder(action: action, setHotkeysPaused: setHotkeysPaused)
                 }
             } header: {
                 Text("Hotkey")
             } footer: {
-                Text("fn works on Apple keyboards. Some third-party keyboards (NuPhy, Keychron, and similar compact boards) implement Fn as a local layer key that never reaches macOS as fn. If holding fn does nothing, switch to Right Option, Right Command, or Right Control instead. Takes effect immediately.")
+                Text("fn works on Apple keyboards. Some third-party keyboards (NuPhy, Keychron, and similar compact boards) implement Fn as a local layer key that never reaches macOS as fn. If holding fn does nothing, record Right Option, Right Command, or Right Control instead, or a combination like ⌥Space. Takes effect immediately.")
             }
             Section {
                 Toggle("AI polish", isOn: $aiPolish)
@@ -152,14 +153,17 @@ final class MainWindowController {
     private let engineManager: EngineManager
     private let store: PersonalStore?
     private let openOnboarding: () -> Void
+    private let setHotkeysPaused: (Bool) -> Void
 
     init(
         engineManager: EngineManager, store: PersonalStore?,
-        openOnboarding: @escaping () -> Void
+        openOnboarding: @escaping () -> Void,
+        setHotkeysPaused: @escaping (Bool) -> Void
     ) {
         self.engineManager = engineManager
         self.store = store
         self.openOnboarding = openOnboarding
+        self.setHotkeysPaused = setHotkeysPaused
     }
 
     func show(tab: MainTab) {
@@ -173,7 +177,8 @@ final class MainWindowController {
             w.isReleasedWhenClosed = false
             w.contentView = NSHostingView(rootView: MainView(
                 model: model, engineManager: engineManager,
-                store: store, openOnboarding: openOnboarding))
+                store: store, openOnboarding: openOnboarding,
+                setHotkeysPaused: setHotkeysPaused))
             w.setContentSize(NSSize(width: 680, height: 600))
             w.center()
             window = w
