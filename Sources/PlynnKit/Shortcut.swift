@@ -61,7 +61,10 @@ public struct Shortcut: Hashable, Sendable, RawRepresentable {
     }
 
     /// Why this can't be bound to `action`, or nil when it can.
-    public func problem(for action: HotkeyAction) -> String? {
+    public func problem(for action: HotkeyAction, among shortcuts: [HotkeyAction: Shortcut]) -> String? {
+        if let other = shortcuts.first(where: { $0.key != action && $0.value == self })?.key {
+            return "Already used for \(other.title)."
+        }
         if Self.leftModifierKeyCodes.contains(keyCode) {
             return "Left-side modifiers are used for other shortcuts. Try fn or a right-side key."
         }
@@ -135,12 +138,17 @@ public struct Shortcut: Hashable, Sendable, RawRepresentable {
 public enum HotkeyAction: String, CaseIterable, Identifiable, Sendable {
     /// Hold to talk; double-tap locks hands-free, triple-tap starts meeting notes.
     case dictate
+    /// Press to start dictating without holding anything; press again to stop.
+    case handsFree
+    case meetingNotes
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
         case .dictate: return "Hold to dictate"
+        case .handsFree: return "Hands-free dictation"
+        case .meetingNotes: return "Meeting notes"
         }
     }
 
@@ -149,6 +157,7 @@ public enum HotkeyAction: String, CaseIterable, Identifiable, Sendable {
     public var defaultShortcut: Shortcut? {
         switch self {
         case .dictate: return .fn
+        case .handsFree, .meetingNotes: return nil
         }
     }
 
