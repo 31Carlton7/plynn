@@ -96,6 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         hotkey.onFnDown = { [weak self] in self?.dispatch(.fnDown) }
         hotkey.onFnUp = { [weak self] in self?.dispatch(.fnUp) }
+        hotkey.onHandsFreeShortcut = { [weak self] in self?.dispatch(.handsFreeShortcut) }
+        hotkey.onMeetingNotesShortcut = { [weak self] in self?.toggleMeeting() }
         hotkey.onKeyDown = { [weak self] keycode in
             self?.dispatch(keycode == 53 ? .escape : .otherKeyDown)
         }
@@ -119,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func dispatch(_ event: Session.Event) {
-        if case .fnDown = event,
+        if event == .fnDown || event == .handsFreeShortcut,
             session.state == .idle,
             !engineManager.activeEngineReady {
             onboarding.show()

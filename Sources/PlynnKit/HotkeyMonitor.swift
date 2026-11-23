@@ -1,7 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Emits raw key events for the dictation shortcut. A lone modifier (default
+/// Emits raw key events for Plynn's shortcuts. A lone modifier (default
 /// fn: flagsChanged keycode 63, .maskSecondaryFn) is watched with a
 /// CGEventTap; a key combination is registered as a Carbon hot key, which
 /// swallows the keystroke so ⌥Space doesn't also type into the focused app.
@@ -10,6 +10,8 @@ import Carbon.HIToolbox
 public final class HotkeyMonitor {
     public var onFnDown: (() -> Void)?
     public var onFnUp: (() -> Void)?
+    public var onHandsFreeShortcut: (() -> Void)?
+    public var onMeetingNotesShortcut: (() -> Void)?
     /// Any other keyDown (keycode passed; 53 = Escape).
     public var onKeyDown: ((Int64) -> Void)?
     /// Settable at any time — takes effect on the next event, no restart needed.
@@ -155,6 +157,10 @@ public final class HotkeyMonitor {
                 fnIsDown = false
                 onFnUp?()
             }
+        case .handsFree:
+            if pressed { onHandsFreeShortcut?() }
+        case .meetingNotes:
+            if pressed { onMeetingNotesShortcut?() }
         }
     }
 }

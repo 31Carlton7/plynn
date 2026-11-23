@@ -224,4 +224,38 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(s.handle(.stopRequested, at: start.advanced(by: .seconds(4))), [.stopAndTranscribe])
         XCTAssertEqual(s.state, .transcribing)
     }
+
+    func testHandsFreeShortcutStartsAndStops() {
+        var s = Session()
+        let start = t0
+        XCTAssertEqual(s.handle(.handsFreeShortcut, at: start), [.startRecording])
+        XCTAssertEqual(s.state, .recording(.handsFree))
+        XCTAssertEqual(s.handle(.handsFreeShortcut, at: start.advanced(by: .seconds(4))), [.stopAndTranscribe])
+        XCTAssertEqual(s.state, .transcribing)
+    }
+
+    /// The shortcut lock has no tap behind it, so an fn press straight after
+    /// it stops the session instead of reading as a triple-tap into a meeting.
+    func testFnRightAfterHandsFreeShortcutStopsInsteadOfStartingMeeting() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.handsFreeShortcut, at: start)
+        XCTAssertEqual(s.handle(.fnDown, at: start.advanced(by: .milliseconds(100))), [.stopAndTranscribe])
+    }
+
+    func testHandsFreeShortcutIgnoredDuringPushToTalk() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.fnDown, at: start)
+        XCTAssertEqual(s.handle(.handsFreeShortcut, at: start.advanced(by: .seconds(1))), [])
+        XCTAssertEqual(s.state, .recording(.pushToTalk))
+    }
+
+    func testHandsFreeShortcutBlockedBySecureInput() {
+        var s = Session()
+        let start = t0
+        _ = s.handle(.secureInputChanged(true), at: start)
+        XCTAssertEqual(s.handle(.handsFreeShortcut, at: start), [])
+        XCTAssertEqual(s.state, .idle)
+    }
 }

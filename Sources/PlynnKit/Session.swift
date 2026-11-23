@@ -14,6 +14,8 @@ public struct Session: Sendable {
     }
     public enum Event: Equatable, Sendable {
         case fnDown, fnUp, otherKeyDown, escape
+        /// The hands-free shortcut: starts a locked session, or stops one.
+        case handsFreeShortcut
         /// Stop initiated from UI (clicking the indicator capsule in hands-free,
         /// or the "Stop meeting" menu item).
         case stopRequested
@@ -67,6 +69,18 @@ public struct Session: Sendable {
             recordingStart = now
             state = .recording(.pushToTalk)
             return [.startRecording]
+
+        case (.idle, .handsFreeShortcut):
+            guard !secureInput else { return [] }
+            lastQuickTapUp = nil
+            handsFreeLockedAt = nil
+            state = .recording(.handsFree)
+            return [.startRecording]
+
+        case (.recording(.handsFree), .handsFreeShortcut):
+            handsFreeLockedAt = nil
+            state = .transcribing
+            return [.stopAndTranscribe]
 
         // Meeting: fn taps are inert unless they form a triple-tap. We reuse
         // the same quick-tap timing so "triple-tap" means the same thing

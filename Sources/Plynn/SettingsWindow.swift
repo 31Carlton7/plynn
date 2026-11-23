@@ -73,7 +73,7 @@ struct SettingsPane: View {
             } header: {
                 Text("Hotkey")
             } footer: {
-                Text("fn works on Apple keyboards. Some third-party keyboards (NuPhy, Keychron, and similar compact boards) implement Fn as a local layer key that never reaches macOS as fn. If holding fn does nothing, record Right Option, Right Command, or Right Control instead, or a combination like ⌥Space. Takes effect immediately.")
+                Text("Hold the dictation key to talk, double-tap it for hands-free, triple-tap it for meeting notes, or give hands-free and meeting notes their own shortcuts. fn works on Apple keyboards. Some third-party keyboards (NuPhy, Keychron, and similar compact boards) implement Fn as a local layer key that never reaches macOS as fn. If holding fn does nothing, record Right Option, Right Command, or Right Control instead, or a combination like ⌥Space. Takes effect immediately.")
             }
             Section {
                 Toggle("AI polish", isOn: $aiPolish)

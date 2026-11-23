@@ -33,17 +33,46 @@ final class ShortcutTests: XCTestCase {
     }
 
     func testDictationAcceptsLoneModifiersAndCombos() {
-        XCTAssertNil(Shortcut.fn.problem(for: .dictate))
-        XCTAssertNil(Shortcut(keyCode: 61).problem(for: .dictate))
-        XCTAssertNil(Shortcut(keyCode: 49, modifiers: .option).problem(for: .dictate))
-        XCTAssertNil(Shortcut(keyCode: 105).problem(for: .dictate), "bare F13 types nothing")
+        XCTAssertNil(Shortcut.fn.problem(for: .dictate, among: [:]))
+        XCTAssertNil(Shortcut(keyCode: 61).problem(for: .dictate, among: [:]))
+        XCTAssertNil(Shortcut(keyCode: 49, modifiers: .option).problem(for: .dictate, among: [:]))
+        XCTAssertNil(Shortcut(keyCode: 105).problem(for: .dictate, among: [:]), "bare F13 types nothing")
     }
 
     func testRejectsShortcutsThatWouldTypeOrClash() {
-        XCTAssertNotNil(Shortcut(keyCode: 55).problem(for: .dictate), "left Command")
-        XCTAssertNotNil(Shortcut(keyCode: 0).problem(for: .dictate), "bare A")
-        XCTAssertNotNil(Shortcut(keyCode: 0, modifiers: .shift).problem(for: .dictate), "⇧A")
-        XCTAssertNotNil(Shortcut(keyCode: 53, modifiers: .option).problem(for: .dictate), "⌥Esc")
+        XCTAssertNotNil(Shortcut(keyCode: 55).problem(for: .dictate, among: [:]), "left Command")
+        XCTAssertNotNil(Shortcut(keyCode: 0).problem(for: .dictate, among: [:]), "bare A")
+        XCTAssertNotNil(Shortcut(keyCode: 0, modifiers: .shift).problem(for: .dictate, among: [:]), "⇧A")
+        XCTAssertNotNil(Shortcut(keyCode: 53, modifiers: .option).problem(for: .dictate, among: [:]), "⌥Esc")
+    }
+
+    func testToolsNeedACombination() {
+        XCTAssertNotNil(Shortcut(keyCode: 54).problem(for: .meetingNotes, among: [:]))
+        XCTAssertNil(Shortcut(keyCode: 46, modifiers: [.control, .shift])
+            .problem(for: .meetingNotes, among: [:]))
+    }
+
+    func testRejectsAShortcutAnotherActionUses() {
+        let optionSpace = Shortcut(keyCode: 49, modifiers: .option)
+        let bound: [HotkeyAction: Shortcut] = [.dictate: .fn, .handsFree: optionSpace]
+        XCTAssertEqual(
+            optionSpace.problem(for: .meetingNotes, among: bound),
+            "Already used for Hands-free dictation.")
+        XCTAssertEqual(
+            Shortcut.fn.problem(for: .handsFree, among: bound),
+            "Already used for Hold to dictate.")
+        // Re-recording an action's own shortcut is not a conflict.
+        XCTAssertNil(optionSpace.problem(for: .handsFree, among: bound))
+    }
+
+    func testToolsDefaultToNoShortcut() {
+        let defaults = scratchDefaults()
+        XCTAssertEqual(HotkeyAction.storedShortcuts(in: defaults), [.dictate: .fn])
+        let controlShiftM = Shortcut(keyCode: 46, modifiers: [.control, .shift])
+        defaults.set(controlShiftM.rawValue, forKey: HotkeyAction.meetingNotes.defaultsKey)
+        XCTAssertEqual(HotkeyAction.meetingNotes.shortcut(in: defaults), controlShiftM)
+        HotkeyAction.meetingNotes.resetShortcut(in: defaults)
+        XCTAssertNil(HotkeyAction.meetingNotes.shortcut(in: defaults))
     }
 
     func testDictationDefaultsToFn() {

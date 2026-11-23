@@ -40,10 +40,10 @@ struct ShortcutRecorder: View {
                             action.resetShortcut()
                             problem = nil
                         } label: {
-                            Image(systemName: "arrow.counterclockwise")
+                            Image(systemName: resetSymbol)
                         }
                         .buttonStyle(.borderless)
-                        .help("Reset to \(action.defaultShortcut?.displayName ?? "none")")
+                        .help(action.defaultShortcut.map { "Reset to \($0.displayName)" } ?? "Clear")
                     }
                 }
                 if let problem {
@@ -54,6 +54,10 @@ struct ShortcutRecorder: View {
             Text(action.title)
         }
         .onDisappear(perform: stopRecording)
+    }
+
+    private var resetSymbol: String {
+        action.defaultShortcut == nil ? "xmark.circle.fill" : "arrow.counterclockwise"
     }
 
     private var label: String {
@@ -67,16 +71,17 @@ struct ShortcutRecorder: View {
             return
         }
         problem = nil
-        setHotkeysPaused(true)
         capture.start { shortcut in
             stopRecording()
-            guard let shortcut else { return }  // Escape
-            if let reason = shortcut.problem(for: action) {
+            guard let shortcut else { return }  // Escape, or another row started recording
+            if let reason = shortcut.problem(for: action, among: HotkeyAction.storedShortcuts()) {
                 problem = reason
                 return
             }
             stored = shortcut.rawValue
         }
+        // After start: starting cancels any other row, and that row unpauses.
+        setHotkeysPaused(true)
     }
 
     private func stopRecording() {
@@ -88,15 +93,22 @@ struct ShortcutRecorder: View {
 
 /// Watches this window's key events while recording and reports the first
 /// complete shortcut: a key pressed with its modifiers, or one modifier
-/// pressed and released alone. Reports nil for a bare Escape.
+/// pressed and released alone. Reports nil for a bare Escape, or when
+/// another row starts recording, so only one row ever listens.
 @MainActor @Observable
 final class KeyCapture {
+    private static weak var listening: KeyCapture?
+
     private(set) var isActive = false
     @ObservationIgnored private var monitor: Any?
+    @ObservationIgnored private var onCapture: ((Shortcut?) -> Void)?
     @ObservationIgnored private var loneModifier: UInt16?
     @ObservationIgnored private var modifierChordBroken = false
 
     func start(onCapture: @escaping (Shortcut?) -> Void) {
+        Self.listening?.onCapture?(nil)
+        Self.listening = self
+        self.onCapture = onCapture
         isActive = true
         loneModifier = nil
         modifierChordBroken = false
@@ -136,6 +148,7 @@ final class KeyCapture {
     func stop() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        onCapture = nil
         isActive = false
     }
 }
