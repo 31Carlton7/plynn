@@ -22,7 +22,7 @@ public final class MeetingRecorder: NSObject, @unchecked Sendable {
     private var stream: SCStream?
     private let queue = DispatchQueue(label: "co.charmtechnologies.plynn.meeting")
     /// One resampler per source; each source has its own native format.
-    private final class Resample {
+    final class Resample {
         var converter: AVAudioConverter?
         var format: AVAudioFormat?
     }
@@ -145,13 +145,14 @@ extension MeetingRecorder: SCStreamOutput, SCStreamDelegate {
         onFailure?(error)
     }
 
-    /// CMSampleBuffer (any PCM layout) → 16 kHz mono Float32.
-    private static func floats16k(from sb: CMSampleBuffer, using r: Resample) -> [Float]? {
+    /// CMSampleBuffer (any PCM layout) → 16 kHz mono Float32. Anything that
+    /// isn't linear PCM is dropped: AVAudioPCMBuffer throws on it.
+    static func floats16k(from sb: CMSampleBuffer, using r: Resample) -> [Float]? {
         guard let fmtDesc = CMSampleBufferGetFormatDescription(sb),
-            let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fmtDesc)?.pointee
+            CMFormatDescriptionGetMediaSubType(fmtDesc) == kAudioFormatLinearPCM
         else { return nil }
-        guard let inFmt = AVAudioFormat(streamDescription: withUnsafePointer(to: asbd) { $0 })
-        else { return nil }
+        let inFmt = AVAudioFormat(cmAudioFormatDescription: fmtDesc)
+        guard inFmt.sampleRate > 0, inFmt.channelCount > 0 else { return nil }
         let frames = AVAudioFrameCount(CMSampleBufferGetNumSamples(sb))
         guard frames > 0, let inBuf = AVAudioPCMBuffer(pcmFormat: inFmt, frameCapacity: frames)
         else { return nil }
@@ -174,8 +175,10 @@ extension MeetingRecorder: SCStreamOutput, SCStreamDelegate {
         else { return nil }
         var fed = false
         var err: NSError?
+        // .noDataNow, not .endOfStream: the converter lives for the whole
+        // meeting, and once told the stream ended it never outputs again.
         conv.convert(to: out, error: &err) { _, status in
-            if fed { status.pointee = .endOfStream; return nil }
+            if fed { status.pointee = .noDataNow; return nil }
             fed = true; status.pointee = .haveData; return inBuf
         }
         guard err == nil, let data = out.floatChannelData else { return nil }
